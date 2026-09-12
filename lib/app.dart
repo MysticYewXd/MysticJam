@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/theme/theme_provider.dart';
+import 'core/undo/last_undo_provider.dart';
 import 'features/home_shell.dart';
 
 class MusicPlayerApp extends ConsumerWidget {
@@ -11,10 +13,23 @@ class MusicPlayerApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeData = ref.watch(materialThemeDataProvider);
     return MaterialApp(
-      title: 'Music Player',
+      title: 'MysticJam',
       debugShowCheckedModeBanner: false,
       theme: themeData,
-      home: const HomeShell(),
+      home: CallbackShortcuts(
+        // App-wide Ctrl+Z for "undo my last delete" — the same action the
+        // snackbar's Undo button triggers (see last_undo_provider.dart), so
+        // it still works after the snackbar itself has disappeared. Placed
+        // above HomeShell so it fires no matter which screen has focus.
+        bindings: {
+          LogicalKeySet(
+            LogicalKeyboardKey.control,
+            LogicalKeyboardKey.keyZ,
+          ): () =>
+              performLastUndo(ref),
+        },
+        child: const HomeShell(),
+      ),
     );
   }
 }

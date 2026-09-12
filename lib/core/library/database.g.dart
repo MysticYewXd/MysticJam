@@ -92,6 +92,26 @@ class $TracksTable extends Tracks with TableInfo<$TracksTable, Track> {
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _albumArtPathMeta = const VerificationMeta(
+    'albumArtPath',
+  );
+  @override
+  late final GeneratedColumn<String> albumArtPath = GeneratedColumn<String>(
+    'album_art_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lyricsMeta = const VerificationMeta('lyrics');
+  @override
+  late final GeneratedColumn<String> lyrics = GeneratedColumn<String>(
+    'lyrics',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -102,6 +122,8 @@ class $TracksTable extends Tracks with TableInfo<$TracksTable, Track> {
     durationMs,
     format,
     dateAdded,
+    albumArtPath,
+    lyrics,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -166,6 +188,21 @@ class $TracksTable extends Tracks with TableInfo<$TracksTable, Track> {
         dateAdded.isAcceptableOrUnknown(data['date_added']!, _dateAddedMeta),
       );
     }
+    if (data.containsKey('album_art_path')) {
+      context.handle(
+        _albumArtPathMeta,
+        albumArtPath.isAcceptableOrUnknown(
+          data['album_art_path']!,
+          _albumArtPathMeta,
+        ),
+      );
+    }
+    if (data.containsKey('lyrics')) {
+      context.handle(
+        _lyricsMeta,
+        lyrics.isAcceptableOrUnknown(data['lyrics']!, _lyricsMeta),
+      );
+    }
     return context;
   }
 
@@ -207,6 +244,14 @@ class $TracksTable extends Tracks with TableInfo<$TracksTable, Track> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}date_added'],
       )!,
+      albumArtPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}album_art_path'],
+      ),
+      lyrics: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}lyrics'],
+      ),
     );
   }
 
@@ -225,6 +270,15 @@ class Track extends DataClass implements Insertable<Track> {
   final int? durationMs;
   final String format;
   final DateTime dateAdded;
+
+  /// Path to a cached image file extracted from the track's embedded
+  /// artwork (ID3 APIC / FLAC PICTURE block), if any. Extracted once at
+  /// scan time, not re-checked on subsequent scans.
+  final String? albumArtPath;
+
+  /// Embedded lyrics (ID3 USLT frame), if the file has any. Plain text,
+  /// unsynchronised — no per-line timestamps.
+  final String? lyrics;
   const Track({
     required this.id,
     required this.filePath,
@@ -234,6 +288,8 @@ class Track extends DataClass implements Insertable<Track> {
     this.durationMs,
     required this.format,
     required this.dateAdded,
+    this.albumArtPath,
+    this.lyrics,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -252,6 +308,12 @@ class Track extends DataClass implements Insertable<Track> {
     }
     map['format'] = Variable<String>(format);
     map['date_added'] = Variable<DateTime>(dateAdded);
+    if (!nullToAbsent || albumArtPath != null) {
+      map['album_art_path'] = Variable<String>(albumArtPath);
+    }
+    if (!nullToAbsent || lyrics != null) {
+      map['lyrics'] = Variable<String>(lyrics);
+    }
     return map;
   }
 
@@ -271,6 +333,12 @@ class Track extends DataClass implements Insertable<Track> {
           : Value(durationMs),
       format: Value(format),
       dateAdded: Value(dateAdded),
+      albumArtPath: albumArtPath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(albumArtPath),
+      lyrics: lyrics == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lyrics),
     );
   }
 
@@ -288,6 +356,8 @@ class Track extends DataClass implements Insertable<Track> {
       durationMs: serializer.fromJson<int?>(json['durationMs']),
       format: serializer.fromJson<String>(json['format']),
       dateAdded: serializer.fromJson<DateTime>(json['dateAdded']),
+      albumArtPath: serializer.fromJson<String?>(json['albumArtPath']),
+      lyrics: serializer.fromJson<String?>(json['lyrics']),
     );
   }
   @override
@@ -302,6 +372,8 @@ class Track extends DataClass implements Insertable<Track> {
       'durationMs': serializer.toJson<int?>(durationMs),
       'format': serializer.toJson<String>(format),
       'dateAdded': serializer.toJson<DateTime>(dateAdded),
+      'albumArtPath': serializer.toJson<String?>(albumArtPath),
+      'lyrics': serializer.toJson<String?>(lyrics),
     };
   }
 
@@ -314,6 +386,8 @@ class Track extends DataClass implements Insertable<Track> {
     Value<int?> durationMs = const Value.absent(),
     String? format,
     DateTime? dateAdded,
+    Value<String?> albumArtPath = const Value.absent(),
+    Value<String?> lyrics = const Value.absent(),
   }) => Track(
     id: id ?? this.id,
     filePath: filePath ?? this.filePath,
@@ -323,6 +397,8 @@ class Track extends DataClass implements Insertable<Track> {
     durationMs: durationMs.present ? durationMs.value : this.durationMs,
     format: format ?? this.format,
     dateAdded: dateAdded ?? this.dateAdded,
+    albumArtPath: albumArtPath.present ? albumArtPath.value : this.albumArtPath,
+    lyrics: lyrics.present ? lyrics.value : this.lyrics,
   );
   Track copyWithCompanion(TracksCompanion data) {
     return Track(
@@ -336,6 +412,10 @@ class Track extends DataClass implements Insertable<Track> {
           : this.durationMs,
       format: data.format.present ? data.format.value : this.format,
       dateAdded: data.dateAdded.present ? data.dateAdded.value : this.dateAdded,
+      albumArtPath: data.albumArtPath.present
+          ? data.albumArtPath.value
+          : this.albumArtPath,
+      lyrics: data.lyrics.present ? data.lyrics.value : this.lyrics,
     );
   }
 
@@ -349,7 +429,9 @@ class Track extends DataClass implements Insertable<Track> {
           ..write('album: $album, ')
           ..write('durationMs: $durationMs, ')
           ..write('format: $format, ')
-          ..write('dateAdded: $dateAdded')
+          ..write('dateAdded: $dateAdded, ')
+          ..write('albumArtPath: $albumArtPath, ')
+          ..write('lyrics: $lyrics')
           ..write(')'))
         .toString();
   }
@@ -364,6 +446,8 @@ class Track extends DataClass implements Insertable<Track> {
     durationMs,
     format,
     dateAdded,
+    albumArtPath,
+    lyrics,
   );
   @override
   bool operator ==(Object other) =>
@@ -376,7 +460,9 @@ class Track extends DataClass implements Insertable<Track> {
           other.album == this.album &&
           other.durationMs == this.durationMs &&
           other.format == this.format &&
-          other.dateAdded == this.dateAdded);
+          other.dateAdded == this.dateAdded &&
+          other.albumArtPath == this.albumArtPath &&
+          other.lyrics == this.lyrics);
 }
 
 class TracksCompanion extends UpdateCompanion<Track> {
@@ -388,6 +474,8 @@ class TracksCompanion extends UpdateCompanion<Track> {
   final Value<int?> durationMs;
   final Value<String> format;
   final Value<DateTime> dateAdded;
+  final Value<String?> albumArtPath;
+  final Value<String?> lyrics;
   const TracksCompanion({
     this.id = const Value.absent(),
     this.filePath = const Value.absent(),
@@ -397,6 +485,8 @@ class TracksCompanion extends UpdateCompanion<Track> {
     this.durationMs = const Value.absent(),
     this.format = const Value.absent(),
     this.dateAdded = const Value.absent(),
+    this.albumArtPath = const Value.absent(),
+    this.lyrics = const Value.absent(),
   });
   TracksCompanion.insert({
     this.id = const Value.absent(),
@@ -407,6 +497,8 @@ class TracksCompanion extends UpdateCompanion<Track> {
     this.durationMs = const Value.absent(),
     required String format,
     this.dateAdded = const Value.absent(),
+    this.albumArtPath = const Value.absent(),
+    this.lyrics = const Value.absent(),
   }) : filePath = Value(filePath),
        title = Value(title),
        format = Value(format);
@@ -419,6 +511,8 @@ class TracksCompanion extends UpdateCompanion<Track> {
     Expression<int>? durationMs,
     Expression<String>? format,
     Expression<DateTime>? dateAdded,
+    Expression<String>? albumArtPath,
+    Expression<String>? lyrics,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -429,6 +523,8 @@ class TracksCompanion extends UpdateCompanion<Track> {
       if (durationMs != null) 'duration_ms': durationMs,
       if (format != null) 'format': format,
       if (dateAdded != null) 'date_added': dateAdded,
+      if (albumArtPath != null) 'album_art_path': albumArtPath,
+      if (lyrics != null) 'lyrics': lyrics,
     });
   }
 
@@ -441,6 +537,8 @@ class TracksCompanion extends UpdateCompanion<Track> {
     Value<int?>? durationMs,
     Value<String>? format,
     Value<DateTime>? dateAdded,
+    Value<String?>? albumArtPath,
+    Value<String?>? lyrics,
   }) {
     return TracksCompanion(
       id: id ?? this.id,
@@ -451,6 +549,8 @@ class TracksCompanion extends UpdateCompanion<Track> {
       durationMs: durationMs ?? this.durationMs,
       format: format ?? this.format,
       dateAdded: dateAdded ?? this.dateAdded,
+      albumArtPath: albumArtPath ?? this.albumArtPath,
+      lyrics: lyrics ?? this.lyrics,
     );
   }
 
@@ -481,6 +581,12 @@ class TracksCompanion extends UpdateCompanion<Track> {
     if (dateAdded.present) {
       map['date_added'] = Variable<DateTime>(dateAdded.value);
     }
+    if (albumArtPath.present) {
+      map['album_art_path'] = Variable<String>(albumArtPath.value);
+    }
+    if (lyrics.present) {
+      map['lyrics'] = Variable<String>(lyrics.value);
+    }
     return map;
   }
 
@@ -494,7 +600,9 @@ class TracksCompanion extends UpdateCompanion<Track> {
           ..write('album: $album, ')
           ..write('durationMs: $durationMs, ')
           ..write('format: $format, ')
-          ..write('dateAdded: $dateAdded')
+          ..write('dateAdded: $dateAdded, ')
+          ..write('albumArtPath: $albumArtPath, ')
+          ..write('lyrics: $lyrics')
           ..write(')'))
         .toString();
   }
@@ -1086,6 +1194,8 @@ typedef $$TracksTableCreateCompanionBuilder =
       Value<int?> durationMs,
       required String format,
       Value<DateTime> dateAdded,
+      Value<String?> albumArtPath,
+      Value<String?> lyrics,
     });
 typedef $$TracksTableUpdateCompanionBuilder =
     TracksCompanion Function({
@@ -1097,6 +1207,8 @@ typedef $$TracksTableUpdateCompanionBuilder =
       Value<int?> durationMs,
       Value<String> format,
       Value<DateTime> dateAdded,
+      Value<String?> albumArtPath,
+      Value<String?> lyrics,
     });
 
 final class $$TracksTableReferences
@@ -1168,6 +1280,16 @@ class $$TracksTableFilterComposer
 
   ColumnFilters<DateTime> get dateAdded => $composableBuilder(
     column: $table.dateAdded,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get albumArtPath => $composableBuilder(
+    column: $table.albumArtPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lyrics => $composableBuilder(
+    column: $table.lyrics,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1245,6 +1367,16 @@ class $$TracksTableOrderingComposer
     column: $table.dateAdded,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get albumArtPath => $composableBuilder(
+    column: $table.albumArtPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lyrics => $composableBuilder(
+    column: $table.lyrics,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$TracksTableAnnotationComposer
@@ -1281,6 +1413,14 @@ class $$TracksTableAnnotationComposer
 
   GeneratedColumn<DateTime> get dateAdded =>
       $composableBuilder(column: $table.dateAdded, builder: (column) => column);
+
+  GeneratedColumn<String> get albumArtPath => $composableBuilder(
+    column: $table.albumArtPath,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get lyrics =>
+      $composableBuilder(column: $table.lyrics, builder: (column) => column);
 
   Expression<T> playlistTracksRefs<T extends Object>(
     Expression<T> Function($$PlaylistTracksTableAnnotationComposer a) f,
@@ -1344,6 +1484,8 @@ class $$TracksTableTableManager
                 Value<int?> durationMs = const Value.absent(),
                 Value<String> format = const Value.absent(),
                 Value<DateTime> dateAdded = const Value.absent(),
+                Value<String?> albumArtPath = const Value.absent(),
+                Value<String?> lyrics = const Value.absent(),
               }) => TracksCompanion(
                 id: id,
                 filePath: filePath,
@@ -1353,6 +1495,8 @@ class $$TracksTableTableManager
                 durationMs: durationMs,
                 format: format,
                 dateAdded: dateAdded,
+                albumArtPath: albumArtPath,
+                lyrics: lyrics,
               ),
           createCompanionCallback:
               ({
@@ -1364,6 +1508,8 @@ class $$TracksTableTableManager
                 Value<int?> durationMs = const Value.absent(),
                 required String format,
                 Value<DateTime> dateAdded = const Value.absent(),
+                Value<String?> albumArtPath = const Value.absent(),
+                Value<String?> lyrics = const Value.absent(),
               }) => TracksCompanion.insert(
                 id: id,
                 filePath: filePath,
@@ -1373,6 +1519,8 @@ class $$TracksTableTableManager
                 durationMs: durationMs,
                 format: format,
                 dateAdded: dateAdded,
+                albumArtPath: albumArtPath,
+                lyrics: lyrics,
               ),
           withReferenceMapper: (p0) => p0
               .map(

@@ -51,18 +51,34 @@ class PlaylistsScreen extends ConsumerWidget {
               final playlist = playlists[index];
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                child: ThemedCard(
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => PlaylistDetailScreen(playlist: playlist)),
+                child: GestureDetector(
+                  onSecondaryTapDown: (details) => showPlaylistContextMenu(
+                    context: context,
+                    ref: ref,
+                    playlist: playlist,
+                    position: details.globalPosition,
                   ),
-                  child: Row(
-                    children: [
-                      ThemedIcon(ThemedIconSlot.playlist, color: theme.colors.textSecondary),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(playlist.name, style: TextStyle(color: theme.colors.textPrimary)),
-                      ),
-                    ],
+                  // No right-click on touch/Android — long-press reaches the
+                  // same menu so rename/delete are still possible there.
+                  onLongPressStart: (details) => showPlaylistContextMenu(
+                    context: context,
+                    ref: ref,
+                    playlist: playlist,
+                    position: details.globalPosition,
+                  ),
+                  child: ThemedCard(
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => PlaylistDetailScreen(playlist: playlist)),
+                    ),
+                    child: Row(
+                      children: [
+                        ThemedIcon(ThemedIconSlot.playlist, color: theme.colors.textSecondary),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(playlist.name, style: TextStyle(color: theme.colors.textPrimary)),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               );

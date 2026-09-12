@@ -4,7 +4,7 @@ import 'theme_model.dart';
 /// The single built-in theme. Ships until the theme editor/marketplace exist.
 const AppTheme defaultTheme = AppTheme(
   name: 'Default',
-  author: 'Music Player',
+  author: 'MysticJam',
   colors: AppColorScheme(
     background: Color(0xFF121212),
     surface: Color(0xFF1E1E1E),

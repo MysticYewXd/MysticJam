@@ -90,32 +90,48 @@ class IconSet {
   final IconData previous;
   final IconData shuffle;
   final IconData repeat;
+  final IconData repeatOne;
   final IconData library;
   final IconData settings;
   final IconData playlist;
   final IconData folderAdd;
+  final IconData fileAdd;
   final IconData search;
   final IconData volumeUp;
   final IconData volumeDown;
   final IconData playlistAdd;
   final IconData removeFromPlaylist;
+  final IconData close;
+  final IconData refresh;
+  final IconData selectAll;
+  final IconData delete;
+  final IconData lyrics;
+  final IconData album;
 
   const IconSet({
     this.play = Icons.play_arrow,
     this.pause = Icons.pause,
-    this.next = Icons.skip_next,
-    this.previous = Icons.skip_previous,
+    this.next = Icons.fast_forward,
+    this.previous = Icons.fast_rewind,
     this.shuffle = Icons.shuffle,
     this.repeat = Icons.repeat,
+    this.repeatOne = Icons.repeat_one,
     this.library = Icons.library_music,
     this.settings = Icons.settings,
     this.playlist = Icons.queue_music,
     this.folderAdd = Icons.create_new_folder,
+    this.fileAdd = Icons.audio_file,
     this.search = Icons.search,
     this.volumeUp = Icons.volume_up,
     this.volumeDown = Icons.volume_down,
     this.playlistAdd = Icons.playlist_add,
     this.removeFromPlaylist = Icons.remove_circle_outline,
+    this.close = Icons.close,
+    this.refresh = Icons.refresh,
+    this.selectAll = Icons.select_all,
+    this.delete = Icons.delete_outline,
+    this.lyrics = Icons.lyrics_outlined,
+    this.album = Icons.album,
   });
 }
 
