@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,6 +8,7 @@ import '../audio/audio_engine_provider.dart';
 import '../audio/system_volume_provider.dart';
 import '../library/database.dart';
 import '../library/library_providers.dart';
+import '../settings/app_settings.dart';
 
 enum PlayerRepeatMode { off, all, one }
 
@@ -30,6 +32,13 @@ class PlaybackState {
   final Duration duration;
   final double volume;
 
+  /// Message from the engine's error stream (bad/missing/corrupt file,
+  /// unsupported codec, etc.) for whatever's currently loaded — null means
+  /// no error. Cleared automatically the next time a different track starts
+  /// opening (see PlaybackController._playAtOrderIndex), so a stale error
+  /// never lingers once playback has actually moved on.
+  final String? errorMessage;
+
   const PlaybackState({
     this.currentTrack,
     this.queue = const [],
@@ -41,6 +50,7 @@ class PlaybackState {
     this.position = Duration.zero,
     this.duration = Duration.zero,
     this.volume = 1.0,
+    this.errorMessage,
   });
 
   bool get hasNext {
@@ -66,6 +76,11 @@ class PlaybackState {
     Duration? position,
     Duration? duration,
     double? volume,
+    // Nullable-setter idiom (same as ThemeLibraryState.copyWith's
+    // activeThemeId) since this is the one field that genuinely needs to be
+    // clearable back to null — plain `errorMessage ?? this.errorMessage`
+    // could never clear an existing error.
+    String? Function()? errorMessage,
   }) {
     return PlaybackState(
       currentTrack: currentTrack ?? this.currentTrack,
@@ -78,6 +93,7 @@ class PlaybackState {
       position: position ?? this.position,
       duration: duration ?? this.duration,
       volume: volume ?? this.volume,
+      errorMessage: errorMessage != null ? errorMessage() : this.errorMessage,
     );
   }
 }
@@ -95,18 +111,35 @@ class PlaybackController extends Notifier<PlaybackState> {
   StreamSubscription<bool>? _playingSub;
   StreamSubscription<bool>? _completedSub;
   StreamSubscription<double>? _volumeSub;
+  StreamSubscription<String>? _errorSub;
 
   // Tracks whose real duration we've already written this session, so a
   // format without a cheap tag-based duration (i.e. anything but FLAC)
   // doesn't get the same value re-persisted on every durationStream tick.
   final Set<int> _durationPersistedForTrackId = {};
 
+  // Captured once in build() rather than calling ref.read(appSettingsProvider
+  // .notifier) at each use site — reading a *different* provider from inside
+  // an onDispose callback is unsafe (Riverpod doesn't guarantee dispose
+  // order between providers during container teardown, and this exact
+  // pattern threw "Tried to read a provider from a ProviderContainer that
+  // was already disposed" in tests). Holding a plain reference sidesteps
+  // that entirely — the notifier object itself is still valid to call
+  // methods on even once its own provider is disposing.
+  late final AppSettingsNotifier _settings;
+
   AudioEngine get _engine => ref.read(audioEngineProvider);
 
   @override
   PlaybackState build() {
+    _settings = ref.read(appSettingsProvider.notifier);
+
     _positionSub = _engine.positionStream.listen((pos) {
       state = state.copyWith(position: pos);
+      final track = state.currentTrack;
+      if (track != null) {
+        _settings.updatePosition(track.id, pos.inMilliseconds);
+      }
     });
     _durationSub = _engine.durationStream.listen((dur) {
       state = state.copyWith(duration: dur);
@@ -114,6 +147,13 @@ class PlaybackController extends Notifier<PlaybackState> {
     });
     _playingSub = _engine.playingStream.listen((playing) {
       state = state.copyWith(isPlaying: playing);
+      // "Save immediately on pause" — position ticks are throttled (see
+      // AppSettingsNotifier.updatePosition), but a pause is a discrete,
+      // infrequent event where the user very plausibly is about to close
+      // the app, so it bypasses the throttle.
+      if (!playing) {
+        _settings.flushPositionNow();
+      }
     });
     _completedSub = _engine.completedStream.listen((completed) {
       if (!completed) return;
@@ -123,6 +163,14 @@ class PlaybackController extends Notifier<PlaybackState> {
         return;
       }
       if (state.hasNext) next();
+    });
+    // Previously unhandled — the engine already reports bad/missing/corrupt
+    // files here (see MediaKitAudioEngine.errorStream), but nothing was
+    // listening, so a failed open() silently did nothing visible. Surfacing
+    // it as state lets the UI show something instead of a track that just
+    // never starts.
+    _errorSub = _engine.errorStream.listen((message) {
+      state = state.copyWith(errorMessage: () => message);
     });
 
     final volumeController = ref.read(systemVolumeControllerProvider);
@@ -143,11 +191,82 @@ class PlaybackController extends Notifier<PlaybackState> {
       _playingSub?.cancel();
       _completedSub?.cancel();
       _volumeSub?.cancel();
+      _errorSub?.cancel();
+      // Best-effort final write — this can't be awaited from a synchronous
+      // dispose callback, so it's a race against process exit. Losing the
+      // last few seconds of position on a hard/forced quit is an accepted
+      // gap (see Phase 2 report), not something solvable without an
+      // OS-level "about to quit" hook, which is out of scope here.
+      _settings.flushPositionNow();
     });
+
+    // Fire-and-forget: build() must return PlaybackState synchronously, so
+    // restoring shuffle/repeat/last-track happens asynchronously once
+    // AppSettingsNotifier's disk read completes, rather than blocking
+    // startup on it.
+    _attemptResume();
+
     return const PlaybackState();
   }
 
-  List<int> _sequentialOrder(int length) => List<int>.generate(length, (i) => i);
+  /// Restores shuffle/repeat immediately once settings have loaded, then —
+  /// if there's a remembered last track — attempts to resume it. Does NOT
+  /// resume if the track's row was deleted from the library or its file no
+  /// longer exists on disk, and clears the stale remembered track in that
+  /// case so future launches stop trying. Restores only the single track
+  /// (queue: [track]) rather than whatever multi-track context it was
+  /// originally played from (a playlist, the whole library, etc.) — that
+  /// context isn't persisted, since doing so would mean tracking entire
+  /// track-id lists just for this; next()/previous() have nothing to move
+  /// to until the user starts a new queue normally.
+  Future<void> _attemptResume() async {
+    await _settings.ready;
+    final settings = ref.read(appSettingsProvider);
+
+    state = state.copyWith(
+      shuffleEnabled: settings.shuffleEnabled,
+      repeatMode: _parseRepeatMode(settings.repeatMode),
+    );
+
+    final trackId = settings.lastTrackId;
+    if (trackId == null) return;
+
+    final track = await ref
+        .read(libraryRepositoryProvider)
+        .getTrackById(trackId);
+    if (track == null || !await File(track.filePath).exists()) {
+      await _settings.clearLastTrack();
+      return;
+    }
+
+    final maxMs = track.durationMs;
+    final clampedMs = maxMs != null
+        ? settings.lastPositionMs.clamp(0, maxMs)
+        : (settings.lastPositionMs < 0 ? 0 : settings.lastPositionMs);
+
+    state = state.copyWith(
+      currentTrack: track,
+      queue: [track],
+      order: const [0],
+      orderIndex: 0,
+      position: Duration(milliseconds: clampedMs),
+    );
+    // play: false — resuming on launch should never start audio
+    // unexpectedly; the track is loaded and seeked, ready for the user to
+    // press play themselves.
+    await _engine.open(track.filePath, play: false);
+    await _engine.seek(Duration(milliseconds: clampedMs));
+  }
+
+  PlayerRepeatMode _parseRepeatMode(String value) {
+    for (final mode in PlayerRepeatMode.values) {
+      if (mode.name == value) return mode;
+    }
+    return PlayerRepeatMode.off;
+  }
+
+  List<int> _sequentialOrder(int length) =>
+      List<int>.generate(length, (i) => i);
 
   List<int> _shuffledOrderKeeping(int length, int keepFirst) {
     final rest = _sequentialOrder(length)..remove(keepFirst);
@@ -189,6 +308,13 @@ class PlaybackController extends Notifier<PlaybackState> {
       if (!state.isPlaying) await _engine.play();
       return;
     }
+    // Clear any stale error from a previous track before this one has a
+    // chance to report its own — a fresh open() attempt should never keep
+    // showing an error from something else entirely.
+    state = state.copyWith(errorMessage: () => null);
+    // "Save immediately on track change" — fire-and-forget, no need to
+    // block opening the track on this write completing.
+    unawaited(_settings.recordTrackStarted(track.id));
     await _engine.open(track.filePath);
   }
 
@@ -228,27 +354,82 @@ class PlaybackController extends Notifier<PlaybackState> {
     newOrder.insert(newIndex, movedTrackIndex);
 
     final currentTrackIndex =
-        state.orderIndex >= 0 && state.orderIndex < state.order.length ? state.order[state.orderIndex] : null;
-    final newOrderIndex = currentTrackIndex != null ? newOrder.indexOf(currentTrackIndex) : state.orderIndex;
+        state.orderIndex >= 0 && state.orderIndex < state.order.length
+        ? state.order[state.orderIndex]
+        : null;
+    final newOrderIndex = currentTrackIndex != null
+        ? newOrder.indexOf(currentTrackIndex)
+        : state.orderIndex;
 
     state = state.copyWith(order: newOrder, orderIndex: newOrderIndex);
+  }
+
+  /// Removes the track at [orderPosition] — a position within the play
+  /// order, same addressing as [reorderQueue], not a raw index into
+  /// [PlaybackState.queue]. If it's the currently playing track, playback
+  /// automatically advances to whatever now sits at that position (the
+  /// track that was next, since removal shifts everything after it back by
+  /// one slot) — or stops entirely if the queue becomes empty. Removing any
+  /// other track just adjusts [PlaybackState.orderIndex] so playback keeps
+  /// pointing at the same track it already was.
+  ///
+  /// Added for Phase 1 test coverage — the prompt this was written against
+  /// asked for "removing the currently playing track" tests, but no
+  /// queue-removal method existed yet; this is the minimal one needed for
+  /// that to mean anything. No UI calls this yet (the Queue screen only
+  /// supports reordering).
+  Future<void> removeFromQueue(int orderPosition) async {
+    if (orderPosition < 0 || orderPosition >= state.order.length) return;
+
+    final removingCurrent = orderPosition == state.orderIndex;
+    final newOrder = List<int>.from(state.order)..removeAt(orderPosition);
+
+    if (newOrder.isEmpty) {
+      await _engine.stop();
+      state = const PlaybackState();
+      await _settings.clearLastTrack();
+      return;
+    }
+
+    final int newOrderIndex;
+    if (removingCurrent) {
+      // Whatever was at the next position now sits at this same slot index,
+      // since removeAt already shifted everything after it back by one —
+      // wrap to the start if we removed the last position.
+      newOrderIndex = orderPosition < newOrder.length ? orderPosition : 0;
+    } else if (orderPosition < state.orderIndex) {
+      newOrderIndex = state.orderIndex - 1;
+    } else {
+      newOrderIndex = state.orderIndex;
+    }
+
+    state = state.copyWith(order: newOrder, orderIndex: newOrderIndex);
+    if (removingCurrent) {
+      await _playAtOrderIndex(newOrderIndex);
+    }
   }
 
   /// Toggles shuffle, regenerating the play order once (not on every track
   /// change) while keeping the currently-playing track in place.
   void toggleShuffle() {
     final enabled = !state.shuffleEnabled;
+    unawaited(_settings.setShuffleEnabled(enabled));
     if (state.queue.isEmpty) {
       state = state.copyWith(shuffleEnabled: enabled);
       return;
     }
-    final currentTrackIndex =
-        state.order.isNotEmpty && state.orderIndex >= 0 ? state.order[state.orderIndex] : 0;
+    final currentTrackIndex = state.order.isNotEmpty && state.orderIndex >= 0
+        ? state.order[state.orderIndex]
+        : 0;
     final newOrder = enabled
         ? _shuffledOrderKeeping(state.queue.length, currentTrackIndex)
         : _sequentialOrder(state.queue.length);
     final newOrderIndex = newOrder.indexOf(currentTrackIndex);
-    state = state.copyWith(shuffleEnabled: enabled, order: newOrder, orderIndex: newOrderIndex);
+    state = state.copyWith(
+      shuffleEnabled: enabled,
+      order: newOrder,
+      orderIndex: newOrderIndex,
+    );
   }
 
   /// Cycles off -> repeat all -> repeat one -> off, matching the common
@@ -260,6 +441,7 @@ class PlaybackController extends Notifier<PlaybackState> {
       PlayerRepeatMode.one => PlayerRepeatMode.off,
     };
     state = state.copyWith(repeatMode: mode);
+    unawaited(_settings.setRepeatMode(mode.name));
   }
 
   Future<void> togglePlayPause() async {
@@ -297,7 +479,9 @@ class PlaybackController extends Notifier<PlaybackState> {
     if (duration <= Duration.zero) return;
     if (track.durationMs != null) return;
     if (!_durationPersistedForTrackId.add(track.id)) return;
-    ref.read(libraryRepositoryProvider).setTrackDuration(track.id, duration.inMilliseconds);
+    ref
+        .read(libraryRepositoryProvider)
+        .setTrackDuration(track.id, duration.inMilliseconds);
   }
 }
 

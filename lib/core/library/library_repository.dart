@@ -13,19 +13,27 @@ class LibraryRepository {
   /// rather than one flat alphabetical-by-title list with every artist
   /// interleaved.
   Stream<List<Track>> watchAllTracks() {
-    return (db.select(db.tracks)
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.artist),
-            (t) => OrderingTerm(expression: t.title),
-          ]))
+    return (db.select(db.tracks)..orderBy([
+          (t) => OrderingTerm(expression: t.artist),
+          (t) => OrderingTerm(expression: t.title),
+        ]))
         .watch();
   }
 
   Future<bool> trackExists(String filePath) async {
-    final row = await (db.select(db.tracks)
-          ..where((t) => t.filePath.equals(filePath)))
-        .getSingleOrNull();
+    final row = await (db.select(
+      db.tracks,
+    )..where((t) => t.filePath.equals(filePath))).getSingleOrNull();
     return row != null;
+  }
+
+  /// Looks up a track by its stable row id — used to resume the last
+  /// played track on startup (see AppSettingsState.lastTrackId), since a
+  /// filePath alone wouldn't survive the track being renamed/moved.
+  Future<Track?> getTrackById(int id) {
+    return (db.select(
+      db.tracks,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
   }
 
   /// Every currently-indexed file path — used to force a metadata re-scan
@@ -42,7 +50,9 @@ class LibraryRepository {
   /// find-and-select step.
   Future<List<int>> getTrackIdsForPaths(List<String> filePaths) async {
     if (filePaths.isEmpty) return [];
-    final rows = await (db.select(db.tracks)..where((t) => t.filePath.isIn(filePaths))).get();
+    final rows = await (db.select(
+      db.tracks,
+    )..where((t) => t.filePath.isIn(filePaths))).get();
     return rows.map((t) => t.id).toList();
   }
 
@@ -58,7 +68,9 @@ class LibraryRepository {
   /// insertOnConflictUpdate() because that method's returned id is
   /// documented as unreliable specifically on the conflict/update path.
   Future<int> upsertTrack(TracksCompanion entry) async {
-    final track = await db.into(db.tracks).insertReturning(
+    final track = await db
+        .into(db.tracks)
+        .insertReturning(
           entry,
           onConflict: DoUpdate((old) => entry, target: [db.tracks.filePath]),
         );
@@ -66,8 +78,9 @@ class LibraryRepository {
   }
 
   Future<void> setAlbumArtPath(int id, String path) {
-    return (db.update(db.tracks)..where((t) => t.id.equals(id)))
-        .write(TracksCompanion(albumArtPath: Value(path)));
+    return (db.update(db.tracks)..where((t) => t.id.equals(id))).write(
+      TracksCompanion(albumArtPath: Value(path)),
+    );
   }
 
   /// Called from PlaybackController the first time a track's real duration
@@ -76,19 +89,24 @@ class LibraryRepository {
   /// this is how they end up with one at all, without an expensive
   /// dedicated probe-every-file scan step.
   Future<void> setTrackDuration(int id, int durationMs) {
-    return (db.update(db.tracks)..where((t) => t.id.equals(id)))
-        .write(TracksCompanion(durationMs: Value(durationMs)));
+    return (db.update(db.tracks)..where((t) => t.id.equals(id))).write(
+      TracksCompanion(durationMs: Value(durationMs)),
+    );
   }
 
   Future<void> deleteTrack(int id) async {
     // Clean up any playlist memberships too, or they'd be orphaned rows
     // pointing at a track that no longer exists.
-    await (db.delete(db.playlistTracks)..where((pt) => pt.trackId.equals(id))).go();
+    await (db.delete(
+      db.playlistTracks,
+    )..where((pt) => pt.trackId.equals(id))).go();
     await (db.delete(db.tracks)..where((t) => t.id.equals(id))).go();
   }
 
   Future<void> deleteTrackByPath(String filePath) async {
-    final row = await (db.select(db.tracks)..where((t) => t.filePath.equals(filePath))).getSingleOrNull();
+    final row = await (db.select(
+      db.tracks,
+    )..where((t) => t.filePath.equals(filePath))).getSingleOrNull();
     if (row == null) return;
     await deleteTrack(row.id);
   }
@@ -96,7 +114,9 @@ class LibraryRepository {
   /// Which playlists [trackId] currently belongs to — captured before a
   /// delete so Undo can put the track back where it was.
   Future<List<int>> getPlaylistIdsForTrack(int trackId) async {
-    final rows = await (db.select(db.playlistTracks)..where((pt) => pt.trackId.equals(trackId))).get();
+    final rows = await (db.select(
+      db.playlistTracks,
+    )..where((pt) => pt.trackId.equals(trackId))).get();
     return rows.map((pt) => pt.playlistId).toList();
   }
 
@@ -105,16 +125,28 @@ class LibraryRepository {
   /// go to the end of each playlist rather than their exact prior position,
   /// which is a reasonable trade for how much simpler it keeps this.
   Future<void> restoreTrack(Track track, List<int> playlistIds) async {
-    final newId = await upsertTrack(TracksCompanion.insert(
-      filePath: track.filePath,
-      title: track.title,
-      artist: Value(track.artist),
-      album: Value(track.album),
-      format: track.format,
-      durationMs: track.durationMs != null ? Value(track.durationMs) : const Value.absent(),
-      albumArtPath: track.albumArtPath != null ? Value(track.albumArtPath) : const Value.absent(),
-      lyrics: track.lyrics != null ? Value(track.lyrics) : const Value.absent(),
-    ));
+    final newId = await upsertTrack(
+      TracksCompanion.insert(
+        filePath: track.filePath,
+        title: track.title,
+        artist: Value(track.artist),
+        album: Value(track.album),
+        format: track.format,
+        durationMs: track.durationMs != null
+            ? Value(track.durationMs)
+            : const Value.absent(),
+        albumArtPath: track.albumArtPath != null
+            ? Value(track.albumArtPath)
+            : const Value.absent(),
+        lyrics: track.lyrics != null
+            ? Value(track.lyrics)
+            : const Value.absent(),
+        genre: track.genre != null ? Value(track.genre) : const Value.absent(),
+        trackNumber: track.trackNumber != null
+            ? Value(track.trackNumber)
+            : const Value.absent(),
+      ),
+    );
     for (final playlistId in playlistIds) {
       await addTrackToPlaylist(playlistId, newId);
     }
@@ -134,9 +166,9 @@ class LibraryRepository {
   }
 
   Stream<List<Playlist>> watchPlaylists() {
-    return (db.select(db.playlists)
-          ..orderBy([(p) => OrderingTerm(expression: p.name)]))
-        .watch();
+    return (db.select(
+      db.playlists,
+    )..orderBy([(p) => OrderingTerm(expression: p.name)])).watch();
   }
 
   Future<int> createPlaylist(String name) {
@@ -144,12 +176,15 @@ class LibraryRepository {
   }
 
   Future<void> renamePlaylist(int id, String name) {
-    return (db.update(db.playlists)..where((p) => p.id.equals(id)))
-        .write(PlaylistsCompanion(name: Value(name)));
+    return (db.update(db.playlists)..where((p) => p.id.equals(id))).write(
+      PlaylistsCompanion(name: Value(name)),
+    );
   }
 
   Future<void> deletePlaylist(int id) async {
-    await (db.delete(db.playlistTracks)..where((pt) => pt.playlistId.equals(id))).go();
+    await (db.delete(
+      db.playlistTracks,
+    )..where((pt) => pt.playlistId.equals(id))).go();
     await (db.delete(db.playlists)..where((p) => p.id.equals(id))).go();
   }
 
@@ -172,9 +207,12 @@ class LibraryRepository {
 
   /// Appends [trackId] to the end of the playlist. No-op if already present.
   Future<void> addTrackToPlaylist(int playlistId, int trackId) async {
-    final existing = await (db.select(db.playlistTracks)
-          ..where((pt) => pt.playlistId.equals(playlistId) & pt.trackId.equals(trackId)))
-        .getSingleOrNull();
+    final existing =
+        await (db.select(db.playlistTracks)..where(
+              (pt) =>
+                  pt.playlistId.equals(playlistId) & pt.trackId.equals(trackId),
+            ))
+            .getSingleOrNull();
     if (existing != null) return;
 
     final countExpr = db.playlistTracks.id.count();
@@ -184,11 +222,15 @@ class LibraryRepository {
     final countRow = await countQuery.getSingle();
     final position = countRow.read(countExpr) ?? 0;
 
-    await db.into(db.playlistTracks).insert(PlaylistTracksCompanion.insert(
-          playlistId: playlistId,
-          trackId: trackId,
-          position: position,
-        ));
+    await db
+        .into(db.playlistTracks)
+        .insert(
+          PlaylistTracksCompanion.insert(
+            playlistId: playlistId,
+            trackId: trackId,
+            position: position,
+          ),
+        );
   }
 
   /// Appends all of [trackIds] to the end of the playlist in one
@@ -203,16 +245,24 @@ class LibraryRepository {
       var position = countRow.read(countExpr) ?? 0;
 
       for (final trackId in trackIds) {
-        final existing = await (db.select(db.playlistTracks)
-              ..where((pt) => pt.playlistId.equals(playlistId) & pt.trackId.equals(trackId)))
-            .getSingleOrNull();
+        final existing =
+            await (db.select(db.playlistTracks)..where(
+                  (pt) =>
+                      pt.playlistId.equals(playlistId) &
+                      pt.trackId.equals(trackId),
+                ))
+                .getSingleOrNull();
         if (existing != null) continue;
 
-        await db.into(db.playlistTracks).insert(PlaylistTracksCompanion.insert(
-              playlistId: playlistId,
-              trackId: trackId,
-              position: position,
-            ));
+        await db
+            .into(db.playlistTracks)
+            .insert(
+              PlaylistTracksCompanion.insert(
+                playlistId: playlistId,
+                trackId: trackId,
+                position: position,
+              ),
+            );
         position++;
       }
     });
@@ -220,28 +270,41 @@ class LibraryRepository {
 
   /// Rewrites every track's position in the playlist to match
   /// [orderedTrackIds] — used after a drag-to-reorder.
-  Future<void> setPlaylistTrackOrder(int playlistId, List<int> orderedTrackIds) async {
+  Future<void> setPlaylistTrackOrder(
+    int playlistId,
+    List<int> orderedTrackIds,
+  ) async {
     await db.transaction(() async {
       for (var i = 0; i < orderedTrackIds.length; i++) {
-        await (db.update(db.playlistTracks)
-              ..where((pt) => pt.playlistId.equals(playlistId) & pt.trackId.equals(orderedTrackIds[i])))
+        await (db.update(db.playlistTracks)..where(
+              (pt) =>
+                  pt.playlistId.equals(playlistId) &
+                  pt.trackId.equals(orderedTrackIds[i]),
+            ))
             .write(PlaylistTracksCompanion(position: Value(i)));
       }
     });
   }
 
   Future<void> removeTrackFromPlaylist(int playlistId, int trackId) {
-    return (db.delete(db.playlistTracks)
-          ..where((pt) => pt.playlistId.equals(playlistId) & pt.trackId.equals(trackId)))
+    return (db.delete(db.playlistTracks)..where(
+          (pt) => pt.playlistId.equals(playlistId) & pt.trackId.equals(trackId),
+        ))
         .go();
   }
 
   Stream<List<Track>> watchPlaylistTracks(int playlistId) {
-    final query = db.select(db.playlistTracks).join([
-      innerJoin(db.tracks, db.tracks.id.equalsExp(db.playlistTracks.trackId)),
-    ])
-      ..where(db.playlistTracks.playlistId.equals(playlistId))
-      ..orderBy([OrderingTerm(expression: db.playlistTracks.position)]);
-    return query.watch().map((rows) => rows.map((row) => row.readTable(db.tracks)).toList());
+    final query =
+        db.select(db.playlistTracks).join([
+            innerJoin(
+              db.tracks,
+              db.tracks.id.equalsExp(db.playlistTracks.trackId),
+            ),
+          ])
+          ..where(db.playlistTracks.playlistId.equals(playlistId))
+          ..orderBy([OrderingTerm(expression: db.playlistTracks.position)]);
+    return query.watch().map(
+      (rows) => rows.map((row) => row.readTable(db.tracks)).toList(),
+    );
   }
 }

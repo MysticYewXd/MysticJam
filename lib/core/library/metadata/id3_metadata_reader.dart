@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dart_tags/dart_tags.dart';
 
 import 'track_metadata.dart';
+import 'track_number_parser.dart';
 
 /// Reads ID3 tags (v1.1 and v2.x) from an MP3 file via package:dart_tags —
 /// pure Dart, no native dependency. ID3v2 is preferred when both are present
@@ -12,13 +13,17 @@ import 'track_metadata.dart';
 Future<ParsedMetadata> readId3Metadata(String filePath) async {
   try {
     final bytes = await File(filePath).readAsBytes();
-    final results = await TagProcessor().getTagsFromByteArray(Future.value(bytes));
+    final results = await TagProcessor().getTagsFromByteArray(
+      Future.value(bytes),
+    );
 
     String? title;
     String? artist;
     String? album;
     Uint8List? artwork;
     String? lyrics;
+    String? genre;
+    int? trackNumber;
 
     // getTagsFromByteArray runs id3v1 then id3v2 by default — reversed so
     // id3v2's richer values win via ??=, with id3v1 only filling gaps.
@@ -27,6 +32,14 @@ Future<ParsedMetadata> readId3Metadata(String filePath) async {
       title ??= _nonEmpty(t['title']);
       artist ??= _nonEmpty(t['artist']);
       album ??= _nonEmpty(t['album']);
+      // ID3v1's genre is always a plain name from its fixed table; ID3v2's
+      // TCON can be either plain text ("Rock", the modern convention) or
+      // the legacy "(17)" / "(17)Rock" bracketed-number format some older
+      // taggers still write. Only the trailing text (if any) is kept for
+      // the legacy form — resolving a bare "(17)" to a genre name would
+      // need ID3v1's genre table, which dart_tags doesn't expose publicly.
+      genre ??= _normalizeGenre(t['genre']);
+      trackNumber ??= parseLeadingTrackNumber(_nonEmpty(t['track']));
 
       if (artwork == null) {
         final pictures = t['picture'];
@@ -49,7 +62,15 @@ Future<ParsedMetadata> readId3Metadata(String filePath) async {
       }
     }
 
-    return ParsedMetadata(title: title, artist: artist, album: album, artwork: artwork, lyrics: lyrics);
+    return ParsedMetadata(
+      title: title,
+      artist: artist,
+      album: album,
+      artwork: artwork,
+      lyrics: lyrics,
+      genre: genre,
+      trackNumber: trackNumber,
+    );
   } catch (_) {
     // Corrupt/unreadable tags shouldn't block indexing — the scanner falls
     // back to the filename, same as any untagged file.
@@ -61,4 +82,16 @@ String? _nonEmpty(dynamic value) {
   if (value is! String) return null;
   final trimmed = value.trim();
   return trimmed.isEmpty ? null : trimmed;
+}
+
+final _legacyGenreBracket = RegExp(r'^\((\d+)\)\s*');
+
+String? _normalizeGenre(dynamic value) {
+  final raw = _nonEmpty(value);
+  if (raw == null) return null;
+  final withoutBracket = raw.replaceFirst(_legacyGenreBracket, '').trim();
+  // A bare "(17)" with nothing else strips down to empty — better to keep
+  // the original bracketed form than to silently discard the only value
+  // present, since we can't resolve the number to a name here.
+  return withoutBracket.isEmpty ? raw : withoutBracket;
 }

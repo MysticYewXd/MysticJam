@@ -28,6 +28,11 @@ enum ThemedIconSlot {
   delete,
   lyrics,
   album,
+  artist,
+  genre,
+  folder,
+  recentlyPlayed,
+  browse,
 }
 
 class ThemedIcon extends ConsumerWidget {
@@ -65,6 +70,11 @@ class ThemedIcon extends ConsumerWidget {
       ThemedIconSlot.delete => icons.delete,
       ThemedIconSlot.lyrics => icons.lyrics,
       ThemedIconSlot.album => icons.album,
+      ThemedIconSlot.artist => icons.artist,
+      ThemedIconSlot.genre => icons.genre,
+      ThemedIconSlot.folder => icons.folder,
+      ThemedIconSlot.recentlyPlayed => icons.recentlyPlayed,
+      ThemedIconSlot.browse => icons.browse,
     };
     return Icon(data, size: size, color: color ?? theme.colors.controlActive);
   }

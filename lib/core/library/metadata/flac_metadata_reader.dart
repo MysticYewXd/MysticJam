@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'track_metadata.dart';
+import 'track_number_parser.dart';
 import 'vorbis_comment_parser.dart';
 
 /// Reads Vorbis-comment metadata, cover art, and exact duration directly
@@ -27,6 +28,8 @@ Future<ParsedMetadata> readFlacMetadata(String filePath) async {
     String? album;
     Uint8List? artwork;
     int? durationMs;
+    String? genre;
+    int? trackNumber;
 
     while (true) {
       final header = await raf.read(4);
@@ -47,6 +50,8 @@ Future<ParsedMetadata> readFlacMetadata(String filePath) async {
         artist ??= comments['ARTIST'];
         album ??= comments['ALBUM'];
         artwork ??= extractPictureFromComments(comments);
+        genre ??= comments['GENRE'];
+        trackNumber ??= parseLeadingTrackNumber(comments['TRACKNUMBER']);
       } else if (blockType == 6 && artwork == null) {
         artwork = parseFlacPictureBlock(body);
       }
@@ -54,7 +59,15 @@ Future<ParsedMetadata> readFlacMetadata(String filePath) async {
       if (isLast) break;
     }
 
-    return ParsedMetadata(title: title, artist: artist, album: album, artwork: artwork, durationMs: durationMs);
+    return ParsedMetadata(
+      title: title,
+      artist: artist,
+      album: album,
+      artwork: artwork,
+      durationMs: durationMs,
+      genre: genre,
+      trackNumber: trackNumber,
+    );
   } catch (_) {
     // Malformed/unreadable file shouldn't block indexing — the scanner
     // falls back to the filename, same as any untagged file.

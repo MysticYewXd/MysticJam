@@ -16,24 +16,32 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (m) => m.createAll(),
-        onUpgrade: (m, from, to) async {
-          if (from < 2) {
-            await m.createTable(playlists);
-            await m.createTable(playlistTracks);
-          }
-          if (from < 3) {
-            await m.addColumn(tracks, tracks.albumArtPath);
-          }
-          if (from < 4) {
-            await m.addColumn(tracks, tracks.lyrics);
-          }
-        },
-      );
+    onCreate: (m) => m.createAll(),
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.createTable(playlists);
+        await m.createTable(playlistTracks);
+      }
+      if (from < 3) {
+        await m.addColumn(tracks, tracks.albumArtPath);
+      }
+      if (from < 4) {
+        await m.addColumn(tracks, tracks.lyrics);
+      }
+      if (from < 5) {
+        // Both nullable, both default to NULL on the existing rows —
+        // preserves every already-indexed track exactly as it was;
+        // genre/trackNumber just read as "unknown" until the next
+        // "Refresh Metadata" re-parses each file and fills them in.
+        await m.addColumn(tracks, tracks.genre);
+        await m.addColumn(tracks, tracks.trackNumber);
+      }
+    },
+  );
 
   static QueryExecutor _openConnection() {
     return LazyDatabase(() async {

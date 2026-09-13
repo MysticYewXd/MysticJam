@@ -53,13 +53,19 @@ class _AlbumsScreenState extends ConsumerState<AlbumsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Albums', style: TextStyle(color: theme.colors.textPrimary)),
+        title: Text(
+          'Albums',
+          style: TextStyle(color: theme.colors.textPrimary),
+        ),
       ),
       body: tracksAsync.when(
         data: (allTracks) {
           if (allTracks.isEmpty) {
             return Center(
-              child: Text('No albums yet', style: TextStyle(color: theme.colors.textSecondary)),
+              child: Text(
+                'No albums yet',
+                style: TextStyle(color: theme.colors.textSecondary),
+              ),
             );
           }
 
@@ -77,16 +83,24 @@ class _AlbumsScreenState extends ConsumerState<AlbumsScreen> {
               Expanded(
                 child: albums.isEmpty
                     ? Center(
-                        child: Text('No matches', style: TextStyle(color: theme.colors.textSecondary)),
+                        child: Text(
+                          'No matches',
+                          style: TextStyle(color: theme.colors.textSecondary),
+                        ),
                       )
                     : GridView.builder(
                         padding: const EdgeInsets.all(12),
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 180,
-                          mainAxisSpacing: 12,
-                          crossAxisSpacing: 12,
-                          childAspectRatio: 0.78,
-                        ),
+                        gridDelegate:
+                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 180,
+                              mainAxisSpacing: 12,
+                              crossAxisSpacing: 12,
+                              // Was 0.78 — too tight for the image + two lines of
+                              // text + card padding, overflowing by a few px at
+                              // some grid widths. Lower ratio means a taller
+                              // cell for the same width.
+                              childAspectRatio: 0.68,
+                            ),
                         itemCount: albums.length,
                         itemBuilder: (context, index) {
                           final album = albums[index];
@@ -99,7 +113,10 @@ class _AlbumsScreenState extends ConsumerState<AlbumsScreen> {
                           return ThemedCard(
                             onTap: () => Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => AlbumDetailScreen(album: album.name, tracks: album.tracks),
+                                builder: (_) => AlbumDetailScreen(
+                                  album: album.name,
+                                  tracks: album.tracks,
+                                ),
                               ),
                             ),
                             padding: const EdgeInsets.all(8),
@@ -112,7 +129,8 @@ class _AlbumsScreenState extends ConsumerState<AlbumsScreen> {
                                     builder: (context, constraints) => TrackArt(
                                       albumArtPath: artPath,
                                       size: constraints.maxWidth,
-                                      borderRadius: theme.shapes.cornerRadius * 0.8,
+                                      borderRadius:
+                                          theme.shapes.cornerRadius * 0.8,
                                     ),
                                   ),
                                 ),
@@ -129,7 +147,10 @@ class _AlbumsScreenState extends ConsumerState<AlbumsScreen> {
                                 ),
                                 Text(
                                   '${album.tracks.length} track${album.tracks.length == 1 ? '' : 's'}',
-                                  style: TextStyle(color: theme.colors.textSecondary, fontSize: 11),
+                                  style: TextStyle(
+                                    color: theme.colors.textSecondary,
+                                    fontSize: 11,
+                                  ),
                                 ),
                               ],
                             ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/platform/file_open_channel.dart';
 import 'core/theme/theme_provider.dart';
 import 'core/undo/last_undo_provider.dart';
 import 'features/home_shell.dart';
@@ -12,6 +13,10 @@ class MusicPlayerApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeData = ref.watch(materialThemeDataProvider);
+    // Read (not watch) purely to trigger creation — this registers a native
+    // method channel listener once and never needs to rebuild anything
+    // itself. See file_open_channel.dart.
+    ref.read(fileOpenChannelProvider);
     return MaterialApp(
       title: 'MysticJam',
       debugShowCheckedModeBanner: false,

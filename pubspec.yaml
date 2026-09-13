@@ -57,6 +57,17 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   drift_dev: ^2.34.5
   build_runner: ^2.15.1
+  # Already in the dependency graph transitively (path_provider depends on
+  # it) — declared explicitly here, dev-only, so tests can fake
+  # PathProviderPlatform.instance and verify real file persistence (Phase 2)
+  # instead of relying on an undeclared transitive package. No production
+  # footprint: dev_dependencies never ship in a release build.
+  path_provider_platform_interface: ^2.1.3
+  # Also already transitive (drift's NativeDatabase is built on it) —
+  # declared explicitly, dev-only, so the v4-to-v5 migration test (Phase 3)
+  # can seed a raw "old schema" SQLite file with hand-written SQL before
+  # letting AppDatabase's real onUpgrade() run against it.
+  sqlite3: ^3.5.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'track_metadata.dart';
+import 'track_number_parser.dart';
 import 'vorbis_comment_parser.dart';
 
 /// Reads Vorbis-comment metadata and cover art from an OGG-container file
@@ -23,9 +24,12 @@ Future<ParsedMetadata> readOggMetadata(String filePath) async {
       if (page == null) break;
 
       Uint8List? commentPayload;
-      if (page.length > 7 && page[0] == 0x03 && String.fromCharCodes(page.sublist(1, 7)) == 'vorbis') {
+      if (page.length > 7 &&
+          page[0] == 0x03 &&
+          String.fromCharCodes(page.sublist(1, 7)) == 'vorbis') {
         commentPayload = Uint8List.sublistView(page, 7);
-      } else if (page.length > 8 && String.fromCharCodes(page.sublist(0, 8)) == 'OpusTags') {
+      } else if (page.length > 8 &&
+          String.fromCharCodes(page.sublist(0, 8)) == 'OpusTags') {
         commentPayload = Uint8List.sublistView(page, 8);
       }
 
@@ -36,6 +40,8 @@ Future<ParsedMetadata> readOggMetadata(String filePath) async {
           artist: comments['ARTIST'],
           album: comments['ALBUM'],
           artwork: extractPictureFromComments(comments),
+          genre: comments['GENRE'],
+          trackNumber: parseLeadingTrackNumber(comments['TRACKNUMBER']),
         );
       }
     }

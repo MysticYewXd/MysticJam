@@ -112,6 +112,26 @@ class $TracksTable extends Tracks with TableInfo<$TracksTable, Track> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _genreMeta = const VerificationMeta('genre');
+  @override
+  late final GeneratedColumn<String> genre = GeneratedColumn<String>(
+    'genre',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _trackNumberMeta = const VerificationMeta(
+    'trackNumber',
+  );
+  @override
+  late final GeneratedColumn<int> trackNumber = GeneratedColumn<int>(
+    'track_number',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -124,6 +144,8 @@ class $TracksTable extends Tracks with TableInfo<$TracksTable, Track> {
     dateAdded,
     albumArtPath,
     lyrics,
+    genre,
+    trackNumber,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -203,6 +225,21 @@ class $TracksTable extends Tracks with TableInfo<$TracksTable, Track> {
         lyrics.isAcceptableOrUnknown(data['lyrics']!, _lyricsMeta),
       );
     }
+    if (data.containsKey('genre')) {
+      context.handle(
+        _genreMeta,
+        genre.isAcceptableOrUnknown(data['genre']!, _genreMeta),
+      );
+    }
+    if (data.containsKey('track_number')) {
+      context.handle(
+        _trackNumberMeta,
+        trackNumber.isAcceptableOrUnknown(
+          data['track_number']!,
+          _trackNumberMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -252,6 +289,14 @@ class $TracksTable extends Tracks with TableInfo<$TracksTable, Track> {
         DriftSqlType.string,
         data['${effectivePrefix}lyrics'],
       ),
+      genre: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}genre'],
+      ),
+      trackNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}track_number'],
+      ),
     );
   }
 
@@ -279,6 +324,20 @@ class Track extends DataClass implements Insertable<Track> {
   /// Embedded lyrics (ID3 USLT frame), if the file has any. Plain text,
   /// unsynchronised — no per-line timestamps.
   final String? lyrics;
+
+  /// Free-text genre from the file's tags (e.g. "Rock") — null means the
+  /// format/file had no genre tag, never an empty/placeholder string. Not
+  /// normalized against a fixed genre list; whatever the tagger wrote is
+  /// stored as-is.
+  final String? genre;
+
+  /// Track's position within its album (from e.g. ID3 TRCK, Vorbis
+  /// TRACKNUMBER). Null means unknown — never 0, which is why this isn't a
+  /// plain non-nullable int with a 0 default: 0 would be indistinguishable
+  /// from "actually track zero" (rare but real, e.g. some hidden-track
+  /// releases) and would sort ahead of every real track number if used as
+  /// an "unknown" sentinel.
+  final int? trackNumber;
   const Track({
     required this.id,
     required this.filePath,
@@ -290,6 +349,8 @@ class Track extends DataClass implements Insertable<Track> {
     required this.dateAdded,
     this.albumArtPath,
     this.lyrics,
+    this.genre,
+    this.trackNumber,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -313,6 +374,12 @@ class Track extends DataClass implements Insertable<Track> {
     }
     if (!nullToAbsent || lyrics != null) {
       map['lyrics'] = Variable<String>(lyrics);
+    }
+    if (!nullToAbsent || genre != null) {
+      map['genre'] = Variable<String>(genre);
+    }
+    if (!nullToAbsent || trackNumber != null) {
+      map['track_number'] = Variable<int>(trackNumber);
     }
     return map;
   }
@@ -339,6 +406,12 @@ class Track extends DataClass implements Insertable<Track> {
       lyrics: lyrics == null && nullToAbsent
           ? const Value.absent()
           : Value(lyrics),
+      genre: genre == null && nullToAbsent
+          ? const Value.absent()
+          : Value(genre),
+      trackNumber: trackNumber == null && nullToAbsent
+          ? const Value.absent()
+          : Value(trackNumber),
     );
   }
 
@@ -358,6 +431,8 @@ class Track extends DataClass implements Insertable<Track> {
       dateAdded: serializer.fromJson<DateTime>(json['dateAdded']),
       albumArtPath: serializer.fromJson<String?>(json['albumArtPath']),
       lyrics: serializer.fromJson<String?>(json['lyrics']),
+      genre: serializer.fromJson<String?>(json['genre']),
+      trackNumber: serializer.fromJson<int?>(json['trackNumber']),
     );
   }
   @override
@@ -374,6 +449,8 @@ class Track extends DataClass implements Insertable<Track> {
       'dateAdded': serializer.toJson<DateTime>(dateAdded),
       'albumArtPath': serializer.toJson<String?>(albumArtPath),
       'lyrics': serializer.toJson<String?>(lyrics),
+      'genre': serializer.toJson<String?>(genre),
+      'trackNumber': serializer.toJson<int?>(trackNumber),
     };
   }
 
@@ -388,6 +465,8 @@ class Track extends DataClass implements Insertable<Track> {
     DateTime? dateAdded,
     Value<String?> albumArtPath = const Value.absent(),
     Value<String?> lyrics = const Value.absent(),
+    Value<String?> genre = const Value.absent(),
+    Value<int?> trackNumber = const Value.absent(),
   }) => Track(
     id: id ?? this.id,
     filePath: filePath ?? this.filePath,
@@ -399,6 +478,8 @@ class Track extends DataClass implements Insertable<Track> {
     dateAdded: dateAdded ?? this.dateAdded,
     albumArtPath: albumArtPath.present ? albumArtPath.value : this.albumArtPath,
     lyrics: lyrics.present ? lyrics.value : this.lyrics,
+    genre: genre.present ? genre.value : this.genre,
+    trackNumber: trackNumber.present ? trackNumber.value : this.trackNumber,
   );
   Track copyWithCompanion(TracksCompanion data) {
     return Track(
@@ -416,6 +497,10 @@ class Track extends DataClass implements Insertable<Track> {
           ? data.albumArtPath.value
           : this.albumArtPath,
       lyrics: data.lyrics.present ? data.lyrics.value : this.lyrics,
+      genre: data.genre.present ? data.genre.value : this.genre,
+      trackNumber: data.trackNumber.present
+          ? data.trackNumber.value
+          : this.trackNumber,
     );
   }
 
@@ -431,7 +516,9 @@ class Track extends DataClass implements Insertable<Track> {
           ..write('format: $format, ')
           ..write('dateAdded: $dateAdded, ')
           ..write('albumArtPath: $albumArtPath, ')
-          ..write('lyrics: $lyrics')
+          ..write('lyrics: $lyrics, ')
+          ..write('genre: $genre, ')
+          ..write('trackNumber: $trackNumber')
           ..write(')'))
         .toString();
   }
@@ -448,6 +535,8 @@ class Track extends DataClass implements Insertable<Track> {
     dateAdded,
     albumArtPath,
     lyrics,
+    genre,
+    trackNumber,
   );
   @override
   bool operator ==(Object other) =>
@@ -462,7 +551,9 @@ class Track extends DataClass implements Insertable<Track> {
           other.format == this.format &&
           other.dateAdded == this.dateAdded &&
           other.albumArtPath == this.albumArtPath &&
-          other.lyrics == this.lyrics);
+          other.lyrics == this.lyrics &&
+          other.genre == this.genre &&
+          other.trackNumber == this.trackNumber);
 }
 
 class TracksCompanion extends UpdateCompanion<Track> {
@@ -476,6 +567,8 @@ class TracksCompanion extends UpdateCompanion<Track> {
   final Value<DateTime> dateAdded;
   final Value<String?> albumArtPath;
   final Value<String?> lyrics;
+  final Value<String?> genre;
+  final Value<int?> trackNumber;
   const TracksCompanion({
     this.id = const Value.absent(),
     this.filePath = const Value.absent(),
@@ -487,6 +580,8 @@ class TracksCompanion extends UpdateCompanion<Track> {
     this.dateAdded = const Value.absent(),
     this.albumArtPath = const Value.absent(),
     this.lyrics = const Value.absent(),
+    this.genre = const Value.absent(),
+    this.trackNumber = const Value.absent(),
   });
   TracksCompanion.insert({
     this.id = const Value.absent(),
@@ -499,6 +594,8 @@ class TracksCompanion extends UpdateCompanion<Track> {
     this.dateAdded = const Value.absent(),
     this.albumArtPath = const Value.absent(),
     this.lyrics = const Value.absent(),
+    this.genre = const Value.absent(),
+    this.trackNumber = const Value.absent(),
   }) : filePath = Value(filePath),
        title = Value(title),
        format = Value(format);
@@ -513,6 +610,8 @@ class TracksCompanion extends UpdateCompanion<Track> {
     Expression<DateTime>? dateAdded,
     Expression<String>? albumArtPath,
     Expression<String>? lyrics,
+    Expression<String>? genre,
+    Expression<int>? trackNumber,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -525,6 +624,8 @@ class TracksCompanion extends UpdateCompanion<Track> {
       if (dateAdded != null) 'date_added': dateAdded,
       if (albumArtPath != null) 'album_art_path': albumArtPath,
       if (lyrics != null) 'lyrics': lyrics,
+      if (genre != null) 'genre': genre,
+      if (trackNumber != null) 'track_number': trackNumber,
     });
   }
 
@@ -539,6 +640,8 @@ class TracksCompanion extends UpdateCompanion<Track> {
     Value<DateTime>? dateAdded,
     Value<String?>? albumArtPath,
     Value<String?>? lyrics,
+    Value<String?>? genre,
+    Value<int?>? trackNumber,
   }) {
     return TracksCompanion(
       id: id ?? this.id,
@@ -551,6 +654,8 @@ class TracksCompanion extends UpdateCompanion<Track> {
       dateAdded: dateAdded ?? this.dateAdded,
       albumArtPath: albumArtPath ?? this.albumArtPath,
       lyrics: lyrics ?? this.lyrics,
+      genre: genre ?? this.genre,
+      trackNumber: trackNumber ?? this.trackNumber,
     );
   }
 
@@ -587,6 +692,12 @@ class TracksCompanion extends UpdateCompanion<Track> {
     if (lyrics.present) {
       map['lyrics'] = Variable<String>(lyrics.value);
     }
+    if (genre.present) {
+      map['genre'] = Variable<String>(genre.value);
+    }
+    if (trackNumber.present) {
+      map['track_number'] = Variable<int>(trackNumber.value);
+    }
     return map;
   }
 
@@ -602,7 +713,9 @@ class TracksCompanion extends UpdateCompanion<Track> {
           ..write('format: $format, ')
           ..write('dateAdded: $dateAdded, ')
           ..write('albumArtPath: $albumArtPath, ')
-          ..write('lyrics: $lyrics')
+          ..write('lyrics: $lyrics, ')
+          ..write('genre: $genre, ')
+          ..write('trackNumber: $trackNumber')
           ..write(')'))
         .toString();
   }
@@ -1196,6 +1309,8 @@ typedef $$TracksTableCreateCompanionBuilder =
       Value<DateTime> dateAdded,
       Value<String?> albumArtPath,
       Value<String?> lyrics,
+      Value<String?> genre,
+      Value<int?> trackNumber,
     });
 typedef $$TracksTableUpdateCompanionBuilder =
     TracksCompanion Function({
@@ -1209,6 +1324,8 @@ typedef $$TracksTableUpdateCompanionBuilder =
       Value<DateTime> dateAdded,
       Value<String?> albumArtPath,
       Value<String?> lyrics,
+      Value<String?> genre,
+      Value<int?> trackNumber,
     });
 
 final class $$TracksTableReferences
@@ -1290,6 +1407,16 @@ class $$TracksTableFilterComposer
 
   ColumnFilters<String> get lyrics => $composableBuilder(
     column: $table.lyrics,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get genre => $composableBuilder(
+    column: $table.genre,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get trackNumber => $composableBuilder(
+    column: $table.trackNumber,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1377,6 +1504,16 @@ class $$TracksTableOrderingComposer
     column: $table.lyrics,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get genre => $composableBuilder(
+    column: $table.genre,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get trackNumber => $composableBuilder(
+    column: $table.trackNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$TracksTableAnnotationComposer
@@ -1421,6 +1558,14 @@ class $$TracksTableAnnotationComposer
 
   GeneratedColumn<String> get lyrics =>
       $composableBuilder(column: $table.lyrics, builder: (column) => column);
+
+  GeneratedColumn<String> get genre =>
+      $composableBuilder(column: $table.genre, builder: (column) => column);
+
+  GeneratedColumn<int> get trackNumber => $composableBuilder(
+    column: $table.trackNumber,
+    builder: (column) => column,
+  );
 
   Expression<T> playlistTracksRefs<T extends Object>(
     Expression<T> Function($$PlaylistTracksTableAnnotationComposer a) f,
@@ -1486,6 +1631,8 @@ class $$TracksTableTableManager
                 Value<DateTime> dateAdded = const Value.absent(),
                 Value<String?> albumArtPath = const Value.absent(),
                 Value<String?> lyrics = const Value.absent(),
+                Value<String?> genre = const Value.absent(),
+                Value<int?> trackNumber = const Value.absent(),
               }) => TracksCompanion(
                 id: id,
                 filePath: filePath,
@@ -1497,6 +1644,8 @@ class $$TracksTableTableManager
                 dateAdded: dateAdded,
                 albumArtPath: albumArtPath,
                 lyrics: lyrics,
+                genre: genre,
+                trackNumber: trackNumber,
               ),
           createCompanionCallback:
               ({
@@ -1510,6 +1659,8 @@ class $$TracksTableTableManager
                 Value<DateTime> dateAdded = const Value.absent(),
                 Value<String?> albumArtPath = const Value.absent(),
                 Value<String?> lyrics = const Value.absent(),
+                Value<String?> genre = const Value.absent(),
+                Value<int?> trackNumber = const Value.absent(),
               }) => TracksCompanion.insert(
                 id: id,
                 filePath: filePath,
@@ -1521,6 +1672,8 @@ class $$TracksTableTableManager
                 dateAdded: dateAdded,
                 albumArtPath: albumArtPath,
                 lyrics: lyrics,
+                genre: genre,
+                trackNumber: trackNumber,
               ),
           withReferenceMapper: (p0) => p0
               .map(

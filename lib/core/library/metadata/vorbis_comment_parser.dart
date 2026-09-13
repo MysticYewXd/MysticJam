@@ -24,12 +24,17 @@ Map<String, String> parseVorbisComments(Uint8List data) {
       offset += 4;
       if (offset + commentLength > data.length) break;
 
-      final comment = utf8.decode(data.sublist(offset, offset + commentLength), allowMalformed: true);
+      final comment = utf8.decode(
+        data.sublist(offset, offset + commentLength),
+        allowMalformed: true,
+      );
       offset += commentLength;
 
       final eq = comment.indexOf('=');
       if (eq <= 0) continue;
-      result[comment.substring(0, eq).toUpperCase()] = comment.substring(eq + 1);
+      result[comment.substring(0, eq).toUpperCase()] = comment.substring(
+        eq + 1,
+      );
     }
   } catch (_) {
     // Return whatever was parsed before the block turned out malformed.
@@ -44,7 +49,8 @@ Map<String, String> parseVorbisComments(Uint8List data) {
 Uint8List? parseFlacPictureBlock(Uint8List data) {
   try {
     final bd = ByteData.sublistView(data);
-    var offset = 4; // picture type — not needed, always take the first picture found
+    var offset =
+        4; // picture type — not needed, always take the first picture found
 
     final mimeLength = bd.getUint32(offset, Endian.big);
     offset += 4 + mimeLength;

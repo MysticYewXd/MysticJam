@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'track_metadata.dart';
+import 'track_number_parser.dart';
 
 const _apeTagPreamble = 'APETAGEX';
 const _apeFooterSize = 32;
@@ -48,6 +49,8 @@ Future<ParsedMetadata> readApeMetadata(String filePath) async {
         title: _nonEmpty(tags['TITLE']),
         artist: _nonEmpty(tags['ARTIST']),
         album: _nonEmpty(tags['ALBUM']),
+        genre: _nonEmpty(tags['GENRE']),
+        trackNumber: parseLeadingTrackNumber(tags['TRACK']),
       );
     } finally {
       await raf.close();
@@ -69,7 +72,9 @@ Map<String, String> _parseItems(Uint8List data, int itemCount) {
 
     final keyEnd = data.indexOf(0x00, offset);
     if (keyEnd == -1) break;
-    final key = ascii.decode(data.sublist(offset, keyEnd), allowInvalid: true).toUpperCase();
+    final key = ascii
+        .decode(data.sublist(offset, keyEnd), allowInvalid: true)
+        .toUpperCase();
     offset = keyEnd + 1;
 
     if (offset + valueLength > data.length) break;
@@ -78,7 +83,10 @@ Map<String, String> _parseItems(Uint8List data, int itemCount) {
     // skipped since their "value" isn't text.
     final itemType = (flags >> 1) & 0x3;
     if (itemType == 0) {
-      result[key] = utf8.decode(data.sublist(offset, offset + valueLength), allowMalformed: true);
+      result[key] = utf8.decode(
+        data.sublist(offset, offset + valueLength),
+        allowMalformed: true,
+      );
     }
     offset += valueLength;
   }

@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../core/theme/theme_provider.dart';
+import '../widgets/themed/dock.dart';
 import '../widgets/themed/themed_icon.dart';
 import 'albums/albums_screen.dart';
+import 'browse/browse_hub_screen.dart';
 import 'library/library_screen.dart';
 import 'now_playing/mini_player.dart';
 import 'playlists/playlists_screen.dart';
 
 /// Root navigation shell: Library/Albums/Playlists tabs with a persistent
-/// MiniPlayer docked above the tab bar, so playback stays visible and
-/// controllable no matter which tab is active.
+/// MiniPlayer docked above a magnifying Dock (macOS-style — icons grow as
+/// the mouse passes near them; see widgets/themed/dock.dart), so playback
+/// stays visible and controllable no matter which tab is active.
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
 
@@ -23,42 +25,71 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = ref.watch(themeProvider);
-
     return Scaffold(
-      body: IndexedStack(
-        index: _tabIndex,
-        children: const [
-          LibraryScreen(),
-          AlbumsScreen(),
-          PlaylistsScreen(),
-        ],
-      ),
-      bottomNavigationBar: Container(
-        // MiniPlayer floats as its own card with margin — this background
-        // is what shows through that margin, giving it visible separation
-        // instead of merging flush into the nav bar below it.
-        color: theme.colors.background,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const MiniPlayer(),
-            NavigationBar(
-              // Default NavigationBar height (80) + MiniPlayer's fixed 64
-              // overflows the bottomNavigationBar slot at extreme window
-              // heights — an explicit smaller height leaves enough margin.
-              height: 60,
-              backgroundColor: theme.colors.surface,
-              selectedIndex: _tabIndex,
-              onDestinationSelected: (i) => setState(() => _tabIndex = i),
-              destinations: const [
-                NavigationDestination(icon: ThemedIcon(ThemedIconSlot.library), label: 'Library'),
-                NavigationDestination(icon: ThemedIcon(ThemedIconSlot.album), label: 'Albums'),
-                NavigationDestination(icon: ThemedIcon(ThemedIconSlot.playlist), label: 'Playlists'),
-              ],
+      // Stack instead of bottomNavigationBar — a real macOS dock floats
+      // directly over the desktop with content scrolling underneath, not
+      // sitting in its own flat-colored strip. Using bottomNavigationBar
+      // meant wrapping the dock in a solid Container just to keep it
+      // separated from the Scaffold body, and that container's edge is
+      // exactly what read as an unwanted bar under the dock.
+      body: Stack(
+        children: [
+          IndexedStack(
+            index: _tabIndex,
+            children: const [
+              LibraryScreen(),
+              AlbumsScreen(),
+              PlaylistsScreen(),
+              BrowseHubScreen(),
+            ],
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const MiniPlayer(),
+                    const SizedBox(height: 10),
+                    Dock(
+                      items: [
+                        DockItem(
+                          slot: ThemedIconSlot.library,
+                          label: 'Library',
+                          selected: _tabIndex == 0,
+                          onTap: () => setState(() => _tabIndex = 0),
+                        ),
+                        DockItem(
+                          slot: ThemedIconSlot.album,
+                          label: 'Albums',
+                          selected: _tabIndex == 1,
+                          onTap: () => setState(() => _tabIndex = 1),
+                        ),
+                        DockItem(
+                          slot: ThemedIconSlot.playlist,
+                          label: 'Playlists',
+                          selected: _tabIndex == 2,
+                          onTap: () => setState(() => _tabIndex = 2),
+                        ),
+                        DockItem(
+                          slot: ThemedIconSlot.browse,
+                          label: 'Browse',
+                          selected: _tabIndex == 3,
+                          onTap: () => setState(() => _tabIndex = 3),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

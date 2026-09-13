@@ -14,6 +14,12 @@ class ParsedMetadata {
   final Uint8List? artwork;
   final int? durationMs;
   final String? lyrics;
+  final String? genre;
+
+  /// The track's position within its album (e.g. 5 from "5/12") — null when
+  /// the format/file has no such tag, not 0. See Tracks.trackNumber in
+  /// library_model.dart for why 0 is never used as an "unknown" sentinel.
+  final int? trackNumber;
 
   const ParsedMetadata({
     this.title,
@@ -22,6 +28,8 @@ class ParsedMetadata {
     this.artwork,
     this.durationMs,
     this.lyrics,
+    this.genre,
+    this.trackNumber,
   });
 
   static const empty = ParsedMetadata();

@@ -18,24 +18,51 @@ class AlbumDetailScreen extends ConsumerWidget {
   final String album;
   final List<Track> tracks;
 
-  const AlbumDetailScreen({super.key, required this.album, required this.tracks});
+  const AlbumDetailScreen({
+    super.key,
+    required this.album,
+    required this.tracks,
+  });
 
-  void _playTrack(BuildContext context, WidgetRef ref, int index) {
+  /// Sorted by track number when known, with untagged tracks (no number at
+  /// all) pushed to the end rather than sorted as if they were "track 0" —
+  /// previously this screen just showed whatever order the library's own
+  /// artist/title sort happened to produce, which rarely matched the
+  /// album's actual sequence.
+  List<Track> _sortedTracks() {
+    final sorted = [...tracks];
+    sorted.sort((a, b) {
+      final an = a.trackNumber;
+      final bn = b.trackNumber;
+      if (an == null && bn == null) return 0;
+      if (an == null) return 1;
+      if (bn == null) return -1;
+      return an.compareTo(bn);
+    });
+    return sorted;
+  }
+
+  void _playTrack(
+    BuildContext context,
+    WidgetRef ref,
+    List<Track> orderedTracks,
+    int index,
+  ) {
     final controller = ref.read(playbackControllerProvider.notifier);
-    controller.playFromQueue(tracks, index);
+    controller.playFromQueue(orderedTracks, index);
     controller.refreshVolume();
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const NowPlayingScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const NowPlayingScreen()));
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
-    final artPath = tracks.firstWhere(
-      (t) => t.albumArtPath != null,
-      orElse: () => tracks.first,
-    ).albumArtPath;
+    final orderedTracks = _sortedTracks();
+    final artPath = tracks
+        .firstWhere((t) => t.albumArtPath != null, orElse: () => tracks.first)
+        .albumArtPath;
 
     return Scaffold(
       appBar: AppBar(
@@ -70,7 +97,10 @@ class AlbumDetailScreen extends ConsumerWidget {
                       const SizedBox(height: 4),
                       Text(
                         '${tracks.length} track${tracks.length == 1 ? '' : 's'}',
-                        style: TextStyle(color: theme.colors.textSecondary, fontSize: 12),
+                        style: TextStyle(
+                          color: theme.colors.textSecondary,
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -80,36 +110,63 @@ class AlbumDetailScreen extends ConsumerWidget {
           ),
           Expanded(
             child: ListView.builder(
-              itemCount: tracks.length,
+              itemCount: orderedTracks.length,
               itemBuilder: (context, index) {
-                final track = tracks[index];
+                final track = orderedTracks[index];
                 return GestureDetector(
                   onSecondaryTapDown: (details) => showTrackContextMenu(
                     context: context,
                     ref: ref,
                     track: track,
                     position: details.globalPosition,
-                    onPlay: () => _playTrack(context, ref, index),
+                    onPlay: () =>
+                        _playTrack(context, ref, orderedTracks, index),
                   ),
                   child: ListTile(
-                    title: Text(track.title, style: TextStyle(color: theme.colors.textPrimary)),
+                    leading: SizedBox(
+                      width: 24,
+                      child: Text(
+                        track.trackNumber?.toString() ?? '–',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: theme.colors.textSecondary,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    title: Text(
+                      track.title,
+                      style: TextStyle(color: theme.colors.textPrimary),
+                    ),
                     subtitle: track.artist != null
-                        ? Text(track.artist!, style: TextStyle(color: theme.colors.textSecondary))
+                        ? Text(
+                            track.artist!,
+                            style: TextStyle(color: theme.colors.textSecondary),
+                          )
                         : null,
-                    onTap: () => _playTrack(context, ref, index),
+                    onTap: () => _playTrack(context, ref, orderedTracks, index),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (track.durationMs != null) ...[
                           Text(
-                            formatDuration(Duration(milliseconds: track.durationMs!)),
-                            style: TextStyle(color: theme.colors.textSecondary, fontSize: 11),
+                            formatDuration(
+                              Duration(milliseconds: track.durationMs!),
+                            ),
+                            style: TextStyle(
+                              color: theme.colors.textSecondary,
+                              fontSize: 11,
+                            ),
                           ),
                           const SizedBox(width: 8),
                         ],
                         IconButton(
-                          icon: ThemedIcon(ThemedIconSlot.playlistAdd, color: theme.colors.textSecondary),
-                          onPressed: () => showAddToPlaylistSheet(context, ref, [track]),
+                          icon: ThemedIcon(
+                            ThemedIconSlot.playlistAdd,
+                            color: theme.colors.textSecondary,
+                          ),
+                          onPressed: () =>
+                              showAddToPlaylistSheet(context, ref, [track]),
                         ),
                       ],
                     ),

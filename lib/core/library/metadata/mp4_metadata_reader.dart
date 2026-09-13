@@ -8,6 +8,8 @@ const _tagTitle = '©nam';
 const _tagArtist = '©ART';
 const _tagAlbum = '©alb';
 const _tagCover = 'covr';
+const _tagGenre = '©gen';
+const _tagTrackNumber = 'trkn';
 
 /// Reads iTunes-style metadata from an M4A/AAC file's MP4 atom tree — pure
 /// Dart. MP4 is a tree of size-prefixed "atoms"/"boxes"; the tags live at
@@ -32,7 +34,9 @@ Future<ParsedMetadata> readMp4Metadata(String filePath) async {
 
     // Unlike most boxes, 'meta' has a 4-byte version/flags field before its
     // children (it's a "full box").
-    final metaChildren = meta.length > 4 ? Uint8List.sublistView(meta, 4) : meta;
+    final metaChildren = meta.length > 4
+        ? Uint8List.sublistView(meta, 4)
+        : meta;
     final ilst = _findChildBox(metaChildren, 'ilst');
     if (ilst == null) return ParsedMetadata.empty;
 
@@ -41,6 +45,14 @@ Future<ParsedMetadata> readMp4Metadata(String filePath) async {
       artist: _findIlstString(ilst, _tagArtist),
       album: _findIlstString(ilst, _tagAlbum),
       artwork: _findIlstBytes(ilst, _tagCover),
+      // ©gen is the modern free-text genre atom used by current taggers.
+      // There's also a legacy binary 'gnre' atom (an index into the ID3v1
+      // genre table) some older files use instead — not read here, since
+      // supporting it would mean either embedding that table locally or
+      // reaching into dart_tags' unexported internals (see the same
+      // decision in id3_metadata_reader.dart's genre handling).
+      genre: _findIlstString(ilst, _tagGenre),
+      trackNumber: _findIlstTrackNumber(ilst),
     );
   } catch (_) {
     // Malformed/unreadable file shouldn't block indexing — the scanner
@@ -54,7 +66,11 @@ Future<ParsedMetadata> readMp4Metadata(String filePath) async {
 /// Walks top-level boxes via file seeks (never reading the whole file into
 /// memory — 'mdat', the actual audio data, can be gigabytes) until [type]
 /// is found, then reads just that box's payload.
-Future<Uint8List?> _findTopLevelBox(RandomAccessFile raf, int fileLength, String type) async {
+Future<Uint8List?> _findTopLevelBox(
+  RandomAccessFile raf,
+  int fileLength,
+  String type,
+) async {
   var pos = 0;
   await raf.setPosition(0);
 
@@ -92,13 +108,21 @@ Future<Uint8List?> _findTopLevelBox(RandomAccessFile raf, int fileLength, String
 Uint8List? _findChildBox(Uint8List data, String type) {
   var offset = 0;
   while (offset + 8 <= data.length) {
-    var size = ByteData.sublistView(data, offset, offset + 4).getUint32(0, Endian.big);
+    var size = ByteData.sublistView(
+      data,
+      offset,
+      offset + 4,
+    ).getUint32(0, Endian.big);
     final boxType = String.fromCharCodes(data.sublist(offset + 4, offset + 8));
     var headerSize = 8;
 
     if (size == 1) {
       if (offset + 16 > data.length) return null;
-      size = ByteData.sublistView(data, offset + 8, offset + 16).getUint64(0, Endian.big);
+      size = ByteData.sublistView(
+        data,
+        offset + 8,
+        offset + 16,
+      ).getUint64(0, Endian.big);
       headerSize = 16;
     }
     if (size < headerSize || offset + size > data.length) return null;
@@ -130,4 +154,19 @@ String? _findIlstString(Uint8List ilst, String tag) {
 Uint8List? _findIlstBytes(Uint8List ilst, String tag) {
   final bytes = _findIlstValue(ilst, tag);
   return (bytes == null || bytes.isEmpty) ? null : bytes;
+}
+
+/// trkn's data payload is binary, not text: 2 reserved bytes, a 16-bit
+/// big-endian track number, a 16-bit big-endian total-track count, then 2
+/// more reserved bytes (8 bytes total in the common case — some encoders
+/// omit the trailing reserved pair, so only the first 4 are required here).
+int? _findIlstTrackNumber(Uint8List ilst) {
+  final bytes = _findIlstValue(ilst, _tagTrackNumber);
+  if (bytes == null || bytes.length < 4) return null;
+  final trackNumber = ByteData.sublistView(
+    bytes,
+    2,
+    4,
+  ).getUint16(0, Endian.big);
+  return trackNumber == 0 ? null : trackNumber;
 }

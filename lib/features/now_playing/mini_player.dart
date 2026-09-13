@@ -31,14 +31,19 @@ class MiniPlayer extends ConsumerWidget {
       decoration: BoxDecoration(
         color: theme.colors.surface,
         borderRadius: BorderRadius.circular(theme.shapes.cornerRadius),
-        // Blur is one of the more GPU-expensive paint ops in Flutter's
-        // renderer, and this bar redraws on every window resize — kept
-        // minimal since this app targets low-power integrated GPUs too.
+        // A little more presence than before (was blurRadius 4/alpha 0.2) —
+        // matches the same "floating glass" family as the Dock beneath it
+        // (see widgets/themed/dock.dart) rather than reading as a flat card
+        // with a token shadow, which is part of why this looked like it was
+        // just hanging in empty space with nothing grounding it. Still far
+        // lighter than the Dock's own BackdropFilter blur — this card is
+        // static (no blurred background), so it doesn't need to compete for
+        // GPU budget the way the Dock's live blur does.
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -48,54 +53,119 @@ class MiniPlayer extends ConsumerWidget {
         child: InkWell(
           onTap: () {
             controller.refreshVolume();
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const NowPlayingScreen()),
-            );
+            Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const NowPlayingScreen()));
           },
-          child: SizedBox(
-            height: 60,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                children: [
-                  TrackArt(
-                    albumArtPath: track.albumArtPath,
-                    size: 40,
-                    borderRadius: theme.shapes.cornerRadius * 0.6,
-                    iconSizeFraction: 0.5,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          track.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: theme.colors.textPrimary, fontWeight: FontWeight.w600),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: 60,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      TrackArt(
+                        albumArtPath: track.albumArtPath,
+                        size: 40,
+                        borderRadius: theme.shapes.cornerRadius * 0.6,
+                        iconSizeFraction: 0.5,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              track.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: theme.colors.textPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            if (track.artist != null)
+                              Text(
+                                track.artist!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: theme.colors.textSecondary,
+                                  fontSize: 12,
+                                ),
+                              ),
+                          ],
                         ),
-                        if (track.artist != null)
-                          Text(
-                            track.artist!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(color: theme.colors.textSecondary, fontSize: 12),
-                          ),
-                      ],
-                    ),
+                      ),
+                      IconButton(
+                        icon: ThemedIcon(
+                          playback.isPlaying
+                              ? ThemedIconSlot.pause
+                              : ThemedIconSlot.play,
+                        ),
+                        onPressed: controller.togglePlayPause,
+                      ),
+                    ],
                   ),
-                  IconButton(
-                    icon: ThemedIcon(playback.isPlaying ? ThemedIconSlot.pause : ThemedIconSlot.play),
-                    onPressed: controller.togglePlayPause,
-                  ),
-                ],
+                ),
               ),
-            ),
+              _MiniProgressBar(
+                position: playback.position,
+                duration: playback.duration,
+                activeColor: theme.colors.progressBar,
+                trackColor: theme.colors.progressBarTrack,
+              ),
+            ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A slim, non-interactive progress line along the bottom edge of the mini
+/// player — previously there was no sense of playback progress at all here,
+/// only in the full Now Playing screen, which is part of why the mini
+/// player felt inert/static ("hanging") rather than alive. Animates its own
+/// fill between position updates instead of jumping in visible steps, so it
+/// reads as continuously running even though the underlying position only
+/// ticks a few times a second.
+class _MiniProgressBar extends StatelessWidget {
+  final Duration position;
+  final Duration duration;
+  final Color activeColor;
+  final Color trackColor;
+
+  const _MiniProgressBar({
+    required this.position,
+    required this.duration,
+    required this.activeColor,
+    required this.trackColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final totalMs = duration.inMilliseconds <= 0 ? 1 : duration.inMilliseconds;
+    final fraction = (position.inMilliseconds / totalMs).clamp(0.0, 1.0);
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(end: fraction),
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.linear,
+      builder: (context, value, _) {
+        return SizedBox(
+          height: 3,
+          child: LinearProgressIndicator(
+            value: value,
+            minHeight: 3,
+            backgroundColor: trackColor,
+            valueColor: AlwaysStoppedAnimation<Color>(activeColor),
+          ),
+        );
+      },
     );
   }
 }

@@ -7,9 +7,22 @@
 
 #include "flutter/generated_plugin_registrant.h"
 
+// Method channel used to hand file paths to an already-running Dart engine
+// — see my_application_open()'s doc comment for why this exists instead of
+// only using fl_dart_project_set_dart_entrypoint_arguments (which only
+// affects a brand-new engine at startup, not one that's already running).
+static const char* kFileChannelName = "com.musicplayer.music_player/files";
+
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
+
+  // Set once on first activation/open and reused afterward — see
+  // my_application_ensure_window()'s doc comment for why this must be
+  // idempotent under GApplication's single-instance model.
+  GtkWindow* window;
+  FlView* view;
+  FlMethodChannel* file_channel;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
@@ -19,11 +32,23 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
 }
 
-// Implements GApplication::activate.
-static void my_application_activate(GApplication* application) {
-  MyApplication* self = MY_APPLICATION(application);
+// Creates the window/engine/view on first activation only. GApplication's
+// single-instance model (see my_application_new()'s G_APPLICATION_HANDLES_OPEN
+// flag, which implies uniqueness unless G_APPLICATION_NON_UNIQUE is set)
+// means activate()/open() can each be called multiple times over the life
+// of one process — every subsequent launch while this one is already
+// running re-delivers to this same primary instance rather than starting a
+// new process. Without this idempotency check, a second launch would have
+// created a second window/engine inside the same process instead of
+// presenting the existing one.
+static void my_application_ensure_window(MyApplication* self) {
+  if (self->window != nullptr) {
+    return;
+  }
+
   GtkWindow* window =
-      GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
+      GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(self)));
+  self->window = window;
 
   // Use a header bar when running in GNOME as this is the common style used
   // by applications and is the setup most users will be using (e.g. Ubuntu
@@ -59,6 +84,7 @@ static void my_application_activate(GApplication* application) {
       project, self->dart_entrypoint_arguments);
 
   FlView* view = fl_view_new(project);
+  self->view = view;
   GdkRGBA background_color;
   // Background defaults to black, override it here if necessary, e.g. #00000000
   // for transparent.
@@ -76,6 +102,51 @@ static void my_application_activate(GApplication* application) {
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
+
+  self->file_channel = fl_method_channel_new(
+      fl_engine_get_binary_messenger(fl_view_get_engine(view)),
+      kFileChannelName, FL_METHOD_CODEC(fl_standard_method_codec_new()));
+}
+
+// Implements GApplication::activate.
+static void my_application_activate(GApplication* application) {
+  MyApplication* self = MY_APPLICATION(application);
+  my_application_ensure_window(self);
+  gtk_window_present(self->window);
+}
+
+// Implements GApplication::open — called with the file(s) a user opened
+// this app with, whether from the command line, a file manager double
+// click, or (most importantly for single-instance behavior) forwarded here
+// automatically by GLib over D-Bus from a second `music_player <file>`
+// invocation while this instance is already the running primary. Handles
+// both "app not running yet" (creates the window here, same as activate())
+// and "app already running" (just forwards the paths to the live Dart
+// engine and raises the window) with the same code path.
+static void my_application_open(GApplication* application, GFile** files,
+                                 gint n_files, const gchar* hint) {
+  MyApplication* self = MY_APPLICATION(application);
+  my_application_ensure_window(self);
+
+  g_autoptr(GPtrArray) paths =
+      g_ptr_array_new_with_free_func(g_free);
+  for (gint i = 0; i < n_files; i++) {
+    gchar* path = g_file_get_path(files[i]);
+    if (path != nullptr) {
+      g_ptr_array_add(paths, path);
+    }
+  }
+  // NULL-terminate for fl_value_new_list_from_strv.
+  g_ptr_array_add(paths, nullptr);
+
+  if (self->file_channel != nullptr && paths->len > 1) {
+    g_autoptr(FlValue) args = fl_value_new_list_from_strv(
+        reinterpret_cast<const gchar* const*>(paths->pdata));
+    fl_method_channel_invoke_method(self->file_channel, "openFiles", args,
+                                    nullptr, nullptr, nullptr);
+  }
+
+  gtk_window_present(self->window);
 }
 
 // Implements GApplication::local_command_line.
@@ -93,7 +164,32 @@ static gboolean my_application_local_command_line(GApplication* application,
     return TRUE;
   }
 
-  g_application_activate(application);
+  // Any non-flag argument is treated as a file to open (launching from a
+  // terminal with a file path, or being invoked by a file manager) — routed
+  // through g_application_open() rather than g_application_activate() so
+  // GApplication's own single-instance machinery does the right thing: if
+  // another instance is already the primary, this forwards the files to it
+  // over D-Bus and this process exits; otherwise GApplication calls
+  // my_application_open() directly, in this same process.
+  g_autoptr(GPtrArray) files =
+      g_ptr_array_new_with_free_func(g_object_unref);
+  for (int i = 0; self->dart_entrypoint_arguments != nullptr &&
+                  self->dart_entrypoint_arguments[i] != nullptr;
+       i++) {
+    const gchar* arg = self->dart_entrypoint_arguments[i];
+    if (arg[0] == '-') {
+      continue;  // a flag, not a file path
+    }
+    g_ptr_array_add(files, g_file_new_for_commandline_arg(arg));
+  }
+
+  if (files->len > 0) {
+    g_application_open(application,
+                       reinterpret_cast<GFile**>(files->pdata), files->len,
+                       "");
+  } else {
+    g_application_activate(application);
+  }
   *exit_status = 0;
 
   return TRUE;
@@ -121,11 +217,13 @@ static void my_application_shutdown(GApplication* application) {
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
+  g_clear_object(&self->file_channel);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 
 static void my_application_class_init(MyApplicationClass* klass) {
   G_APPLICATION_CLASS(klass)->activate = my_application_activate;
+  G_APPLICATION_CLASS(klass)->open = my_application_open;
   G_APPLICATION_CLASS(klass)->local_command_line =
       my_application_local_command_line;
   G_APPLICATION_CLASS(klass)->startup = my_application_startup;
@@ -142,7 +240,15 @@ MyApplication* my_application_new() {
   // the application to be recognized beyond its binary name.
   g_set_prgname(APPLICATION_ID);
 
+  // G_APPLICATION_HANDLES_OPEN (replacing the scaffolded default's
+  // G_APPLICATION_NON_UNIQUE) is what actually turns on GLib's built-in
+  // single-instance behavior: without NON_UNIQUE, GApplication registers
+  // this application-id on the session D-Bus, and a second launch detects
+  // the existing owner and forwards to it instead of starting a second
+  // process. HANDLES_OPEN additionally enables the open() vtable used above
+  // for file-path forwarding, both from the command line and from a file
+  // manager association.
   return MY_APPLICATION(g_object_new(my_application_get_type(),
                                      "application-id", APPLICATION_ID, "flags",
-                                     G_APPLICATION_NON_UNIQUE, nullptr));
+                                     G_APPLICATION_HANDLES_OPEN, nullptr));
 }

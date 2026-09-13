@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=MysticJam
+Comment=Local-only music player — no accounts, no streaming
+Exec=music_player %U
+Icon=com.musicplayer.music_player
+Terminal=false
+Categories=Audio;Music;Player;AudioVideo;
+MimeType=audio/mpeg;audio/flac;audio/x-flac;audio/wav;audio/x-wav;audio/ogg;audio/opus;audio/mp4;audio/x-m4a;audio/aac;audio/x-ms-wma;audio/x-ape;application/ogg;
+StartupNotify=true
+StartupWMClass=com.musicplayer.music_player

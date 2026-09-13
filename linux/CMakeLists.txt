@@ -126,3 +126,20 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
   install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
 endif()
+
+# Desktop integration (.desktop file + icon). Installed alongside the bundle
+# by default (harmless — a relocatable bundle just carries these files with
+# it); if CMAKE_INSTALL_PREFIX is explicitly overridden to a real system
+# prefix (e.g. `cmake --install . --prefix /usr`), these correctly land in
+# the standard XDG locations (share/applications, share/icons/...) instead.
+# See the "Linux packaging" section in README.md for why Exec= in the
+# .desktop file still needs the binary reachable on PATH either way — a
+# relocatable bundle isn't on PATH by itself.
+install(FILES "mysticjam.desktop"
+  DESTINATION "share/applications"
+  RENAME "com.musicplayer.music_player.desktop"
+  COMPONENT Runtime)
+install(FILES "mysticjam.png"
+  DESTINATION "share/icons/hicolor/192x192/apps"
+  RENAME "com.musicplayer.music_player.png"
+  COMPONENT Runtime)

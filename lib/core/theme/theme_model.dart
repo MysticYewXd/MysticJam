@@ -75,10 +75,7 @@ class AppLayout {
   final NowPlayingLayout nowPlaying;
   final LibraryLayout library;
 
-  const AppLayout({
-    required this.nowPlaying,
-    required this.library,
-  });
+  const AppLayout({required this.nowPlaying, required this.library});
 }
 
 /// Fixed icon slots a theme may override. Anything left null falls back to
@@ -107,6 +104,11 @@ class IconSet {
   final IconData delete;
   final IconData lyrics;
   final IconData album;
+  final IconData artist;
+  final IconData genre;
+  final IconData folder;
+  final IconData recentlyPlayed;
+  final IconData browse;
 
   const IconSet({
     this.play = Icons.play_arrow,
@@ -132,6 +134,11 @@ class IconSet {
     this.delete = Icons.delete_outline,
     this.lyrics = Icons.lyrics_outlined,
     this.album = Icons.album,
+    this.artist = Icons.person_outline,
+    this.genre = Icons.category_outlined,
+    this.folder = Icons.folder_outlined,
+    this.recentlyPlayed = Icons.history,
+    this.browse = Icons.explore_outlined,
   });
 }
 
@@ -154,11 +161,7 @@ class ThemeAssets {
   final String? artFrame;
   final String? texture;
 
-  const ThemeAssets({
-    this.backgroundImage,
-    this.artFrame,
-    this.texture,
-  });
+  const ThemeAssets({this.backgroundImage, this.artFrame, this.texture});
 }
 
 /// The Dart-side mirror of a theme.json package. This is the single source of
