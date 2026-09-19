@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/audio/format_support.dart';
-import '../../core/format_duration.dart';
 import '../../core/library/database.dart';
 import '../../core/library/library_providers.dart';
 import '../../core/library/library_scanner.dart';
@@ -12,9 +11,11 @@ import '../../core/settings/app_settings.dart';
 import '../../core/theme/theme_provider.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/themed/themed_button.dart';
-import '../../widgets/themed/themed_card.dart';
 import '../../widgets/themed/themed_icon.dart';
+import '../../widgets/themed/round_buttons.dart';
 import '../../widgets/themed/themed_search_bar.dart';
+import '../../widgets/themed/track_row.dart';
+import '../now_playing/mini_player.dart';
 import '../now_playing/now_playing_screen.dart';
 import '../playlists/playlist_actions.dart';
 import '../settings/settings_screen.dart';
@@ -468,6 +469,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                             ),
                             const SizedBox(width: 12),
                             ThemedButton(
+                              ghost: true,
                               label: _scanning ? 'Scanning...' : 'Add Folder',
                               icon: theme.icons.folderAdd,
                               onPressed: _scanning ? null : _pickAndScanFolder,
@@ -491,6 +493,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                         onChanged: (value) => setState(() => _query = value),
                       ),
                     ),
+                    const MiniPlayer(),
                     Expanded(
                       child: filtered.isEmpty
                           ? Center(
@@ -518,9 +521,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                                       row.artist.toUpperCase(),
                                       style: TextStyle(
                                         color: theme.colors.textSecondary,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: 1,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 1.3,
                                       ),
                                     ),
                                   );
@@ -550,7 +553,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                                     onLongPress: _selectionMode
                                         ? null
                                         : () => _enterSelectionMode(track.id),
-                                    child: ThemedCard(
+                                    child: TrackRow(
+                                      track: track,
+                                      subtitle: track.album,
                                       // Queue is the currently filtered/visible list, so
                                       // next/previous walk through what's on screen —
                                       // and re-tapping the already-playing track just
@@ -558,62 +563,30 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                                       onTap: _selectionMode
                                           ? () => _toggleSelection(track.id)
                                           : () => _playTrack(filtered, index),
-                                      child: Row(
-                                        children: [
-                                          if (_selectionMode)
-                                            Checkbox(
+                                      leading: _selectionMode
+                                          ? Checkbox(
                                               value: selected,
                                               activeColor: theme.colors.primary,
                                               onChanged: (_) =>
                                                   _toggleSelection(track.id),
-                                            ),
-                                          Expanded(
-                                            child: Text(
-                                              track.title,
-                                              style: TextStyle(
-                                                color: theme.colors.textPrimary,
+                                            )
+                                          : null,
+                                      actions: _selectionMode
+                                          ? const []
+                                          : [
+                                              RoundIconButton(
+                                                slot:
+                                                    ThemedIconSlot.playlistAdd,
+                                                tooltip: 'Add to playlist',
+                                                diameter: 36,
+                                                onPressed: () =>
+                                                    showAddToPlaylistSheet(
+                                                      context,
+                                                      ref,
+                                                      [track],
+                                                    ),
                                               ),
-                                            ),
-                                          ),
-                                          if (track.durationMs != null) ...[
-                                            Text(
-                                              formatDuration(
-                                                Duration(
-                                                  milliseconds:
-                                                      track.durationMs!,
-                                                ),
-                                              ),
-                                              style: TextStyle(
-                                                color:
-                                                    theme.colors.textSecondary,
-                                                fontSize: 11,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                          ],
-                                          Text(
-                                            track.format.toUpperCase(),
-                                            style: TextStyle(
-                                              color: theme.colors.textSecondary,
-                                              fontSize: 11,
-                                            ),
-                                          ),
-                                          if (!_selectionMode)
-                                            IconButton(
-                                              icon: ThemedIcon(
-                                                ThemedIconSlot.playlistAdd,
-                                                color:
-                                                    theme.colors.textSecondary,
-                                              ),
-                                              onPressed: () =>
-                                                  showAddToPlaylistSheet(
-                                                    context,
-                                                    ref,
-                                                    [track],
-                                                  ),
-                                            ),
-                                        ],
-                                      ),
+                                            ],
                                     ),
                                   ),
                                 );

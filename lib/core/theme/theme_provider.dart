@@ -56,7 +56,7 @@ ThemeData _buildThemeData(AppTheme t) {
     secondary: t.colors.accent,
     error: t.colors.error,
     onSurface: t.colors.textPrimary,
-    onPrimary: t.colors.textPrimary,
+    onPrimary: t.colors.onPrimary,
   );
 
   return ThemeData(
@@ -81,6 +81,13 @@ ThemeData _buildThemeData(AppTheme t) {
         fontWeight: t.typography.bodyWeight,
         color: t.colors.textSecondary,
       ),
+    ),
+    appBarTheme: AppBarTheme(
+      backgroundColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      titleTextStyle: t.typography.display(24, color: t.colors.textPrimary),
+      iconTheme: IconThemeData(color: t.colors.textPrimary),
     ),
     cardTheme: CardThemeData(
       color: t.colors.surface,

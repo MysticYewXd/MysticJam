@@ -44,6 +44,9 @@ class TrackArt extends ConsumerWidget {
             : Image.file(
                 File(path),
                 fit: BoxFit.cover,
+                // Decode at thumbnail size instead of full resolution — a long
+                // list would otherwise hold every cover at full size in memory.
+                cacheWidth: size <= 120 ? (size * 2).round() : null,
                 errorBuilder: (context, error, stackTrace) => placeholder,
               ),
       ),

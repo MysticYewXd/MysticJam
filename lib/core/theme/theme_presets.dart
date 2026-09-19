@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'custom_theme_data.dart';
 import 'theme_model.dart';
+import 'vesper_palette.dart';
 
 /// Starter presets shown in the theme editor's library alongside anything
 /// the user has saved — remixable starting points rather than fixed
@@ -9,22 +10,10 @@ import 'theme_model.dart';
 final List<CustomThemeData> builtInPresets = [
   CustomThemeData(
     id: 'preset-light',
-    name: 'Light',
-    colors: const AppColorScheme(
-      background: Color(0xFFFFFFFF),
-      surface: Color(0xFFF4F4F6),
-      primary: Color(0xFF5B4FE8),
-      accent: Color(0xFF00A896),
-      textPrimary: Color(0xFF1A1A1F),
-      textSecondary: Color(0xFF6B6B76),
-      progressBar: Color(0xFF5B4FE8),
-      progressBarTrack: Color(0xFFE2E2E8),
-      controlActive: Color(0xFF1A1A1F),
-      controlInactive: Color(0xFFAFAFB8),
-      error: Color(0xFFD32F4A),
-    ),
+    name: 'Vesper Dawn',
+    colors: vesperDawnColors,
     typography: const AppTypography(
-      fontFamily: 'Roboto',
+      fontFamily: sansFontFamily,
       headerSize: 22,
       headerWeight: FontWeight.w600,
       bodySize: 15,
@@ -32,7 +21,7 @@ final List<CustomThemeData> builtInPresets = [
       lyricsSize: 17,
       lyricsWeight: FontWeight.w400,
     ),
-    shapes: const AppShapes(cornerRadius: 12, borderWidth: 1, cardElevation: 0),
+    shapes: const AppShapes(cornerRadius: 14, borderWidth: 1, cardElevation: 0),
   ),
   CustomThemeData(
     id: 'preset-midnight',
@@ -51,7 +40,7 @@ final List<CustomThemeData> builtInPresets = [
       error: Color(0xFFE5637A),
     ),
     typography: const AppTypography(
-      fontFamily: 'Roboto',
+      fontFamily: sansFontFamily,
       headerSize: 22,
       headerWeight: FontWeight.w700,
       bodySize: 15,
@@ -78,7 +67,7 @@ final List<CustomThemeData> builtInPresets = [
       error: Color(0xFFE85D5D),
     ),
     typography: const AppTypography(
-      fontFamily: 'Roboto',
+      fontFamily: sansFontFamily,
       headerSize: 22,
       headerWeight: FontWeight.w600,
       bodySize: 15,
@@ -105,7 +94,7 @@ final List<CustomThemeData> builtInPresets = [
       error: Color(0xFFEF5350),
     ),
     typography: const AppTypography(
-      fontFamily: 'Roboto',
+      fontFamily: sansFontFamily,
       headerSize: 21,
       headerWeight: FontWeight.w500,
       bodySize: 14,

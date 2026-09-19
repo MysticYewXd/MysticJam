@@ -50,36 +50,37 @@ class CustomThemeData {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'colors': {
-          'background': colors.background.toARGB32(),
-          'surface': colors.surface.toARGB32(),
-          'primary': colors.primary.toARGB32(),
-          'accent': colors.accent.toARGB32(),
-          'textPrimary': colors.textPrimary.toARGB32(),
-          'textSecondary': colors.textSecondary.toARGB32(),
-          'progressBar': colors.progressBar.toARGB32(),
-          'progressBarTrack': colors.progressBarTrack.toARGB32(),
-          'controlActive': colors.controlActive.toARGB32(),
-          'controlInactive': colors.controlInactive.toARGB32(),
-          'error': colors.error.toARGB32(),
-        },
-        'typography': {
-          'fontFamily': typography.fontFamily,
-          'headerSize': typography.headerSize,
-          'headerWeight': FontWeight.values.indexOf(typography.headerWeight),
-          'bodySize': typography.bodySize,
-          'bodyWeight': FontWeight.values.indexOf(typography.bodyWeight),
-          'lyricsSize': typography.lyricsSize,
-          'lyricsWeight': FontWeight.values.indexOf(typography.lyricsWeight),
-        },
-        'shapes': {
-          'cornerRadius': shapes.cornerRadius,
-          'borderWidth': shapes.borderWidth,
-          'cardElevation': shapes.cardElevation,
-        },
-      };
+    'id': id,
+    'name': name,
+    'colors': {
+      'background': colors.background.toARGB32(),
+      'surface': colors.surface.toARGB32(),
+      'primary': colors.primary.toARGB32(),
+      'accent': colors.accent.toARGB32(),
+      'textPrimary': colors.textPrimary.toARGB32(),
+      'textSecondary': colors.textSecondary.toARGB32(),
+      'progressBar': colors.progressBar.toARGB32(),
+      'progressBarTrack': colors.progressBarTrack.toARGB32(),
+      'controlActive': colors.controlActive.toARGB32(),
+      'controlInactive': colors.controlInactive.toARGB32(),
+      'error': colors.error.toARGB32(),
+      for (final e in colors.explicitExtras.entries) e.key: e.value.toARGB32(),
+    },
+    'typography': {
+      'fontFamily': typography.fontFamily,
+      'headerSize': typography.headerSize,
+      'headerWeight': FontWeight.values.indexOf(typography.headerWeight),
+      'bodySize': typography.bodySize,
+      'bodyWeight': FontWeight.values.indexOf(typography.bodyWeight),
+      'lyricsSize': typography.lyricsSize,
+      'lyricsWeight': FontWeight.values.indexOf(typography.lyricsWeight),
+    },
+    'shapes': {
+      'cornerRadius': shapes.cornerRadius,
+      'borderWidth': shapes.borderWidth,
+      'cardElevation': shapes.cardElevation,
+    },
+  };
 
   factory CustomThemeData.fromJson(Map<String, dynamic> json) {
     final c = json['colors'] as Map<String, dynamic>;
@@ -87,7 +88,10 @@ class CustomThemeData {
     final s = json['shapes'] as Map<String, dynamic>;
 
     Color color(String key) => Color(c[key] as int);
-    FontWeight weight(String key) => FontWeight.values[(t[key] as int).clamp(0, 8)];
+    Color? optionalColor(String key) =>
+        c[key] is int ? Color(c[key] as int) : null;
+    FontWeight weight(String key) =>
+        FontWeight.values[(t[key] as int).clamp(0, 8)];
 
     return CustomThemeData(
       id: json['id'] as String,
@@ -104,9 +108,19 @@ class CustomThemeData {
         controlActive: color('controlActive'),
         controlInactive: color('controlInactive'),
         error: color('error'),
+        chrome: optionalColor('chrome'),
+        line: optionalColor('line'),
+        onPrimary: optionalColor('onPrimary'),
+        accentSoft: optionalColor('accentSoft'),
+        textFaint: optionalColor('textFaint'),
       ),
       typography: AppTypography(
-        fontFamily: t['fontFamily'] as String,
+        // Themes saved before the Vesper fonts shipped name Roboto, which the
+        // app never bundled; they get the new sans so they match the rest.
+        fontFamily: t['fontFamily'] == 'Roboto'
+            ? sansFontFamily
+            : t['fontFamily'] as String,
+        displayFamily: (t['displayFamily'] as String?) ?? displayFontFamily,
         headerSize: (t['headerSize'] as num).toDouble(),
         headerWeight: weight('headerWeight'),
         bodySize: (t['bodySize'] as num).toDouble(),

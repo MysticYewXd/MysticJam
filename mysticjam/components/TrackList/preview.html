@@ -1,0 +1,29 @@
+<!-- @dsCard group="Media" height=760 subtitle="Full list and compact queue; playing, hover, liked" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TrackList — preview</title>
+<style>
+  html, body { margin: 0; }
+  body { background: var(--surface-0); }
+  .pv { display: flex; flex-direction: column; gap: var(--space-6); padding: var(--space-5) var(--space-6); }
+  .sec { display: flex; flex-direction: column; gap: var(--space-3); }
+  .sec .overline { color: var(--ink-faint); }
+  .queue { max-width: 400px; }
+</style>
+</head>
+<body>
+<div id="root" class="vs-stage pv"></div>
+<script>
+  var V = window.Vesper;
+  var tracks = V.sample.tracks;
+  document.getElementById('root').innerHTML =
+    '<div class="sec"><div class="overline">Full list (row 1 is playing, hover a row to reveal its actions)</div>' +
+      V.list(tracks.slice(0, 5), { current: 0 }) + '</div>' +
+    '<div class="sec queue"><div class="overline">Compact list on a panel</div><div class="vs-panel">' +
+      V.list(tracks.slice(1, 5), { compact: true, current: 1 }) + '</div></div>';
+  V.mount(document);
+</script>
+</body>
+</html>

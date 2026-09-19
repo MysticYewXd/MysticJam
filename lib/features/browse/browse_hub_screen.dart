@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 
 import '../../core/theme/theme_provider.dart';
 import '../../widgets/themed/themed_icon.dart';
+import '../now_playing/mini_player.dart';
 import 'grouped_browse_screen.dart';
 import 'recently_played_screen.dart';
 
@@ -25,86 +26,95 @@ class BrowseHubScreen extends ConsumerWidget {
           style: TextStyle(color: theme.colors.textPrimary),
         ),
       ),
-      body: ListView(
+      body: Column(
         children: [
-          ListTile(
-            leading: ThemedIcon(
-              ThemedIconSlot.artist,
-              color: theme.colors.textSecondary,
-            ),
-            title: Text(
-              'Artists',
-              style: TextStyle(color: theme.colors.textPrimary),
-            ),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => GroupedBrowseScreen(
-                  title: 'Artists',
-                  rowIcon: ThemedIconSlot.artist,
-                  keyOf: (track) => track.artist,
-                  unknownLabel: 'Unknown Artist',
-                  countLabel: (n) => '$n track${n == 1 ? '' : 's'}',
+          const MiniPlayer(),
+          Expanded(
+            child: ListView(
+              children: [
+                ListTile(
+                  leading: ThemedIcon(
+                    ThemedIconSlot.artist,
+                    color: theme.colors.textSecondary,
+                  ),
+                  title: Text(
+                    'Artists',
+                    style: TextStyle(color: theme.colors.textPrimary),
+                  ),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => GroupedBrowseScreen(
+                        title: 'Artists',
+                        rowIcon: ThemedIconSlot.artist,
+                        keyOf: (track) => track.artist,
+                        unknownLabel: 'Unknown Artist',
+                        countLabel: (n) => '$n track${n == 1 ? '' : 's'}',
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          ),
-          ListTile(
-            leading: ThemedIcon(
-              ThemedIconSlot.genre,
-              color: theme.colors.textSecondary,
-            ),
-            title: Text(
-              'Genres',
-              style: TextStyle(color: theme.colors.textPrimary),
-            ),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => GroupedBrowseScreen(
-                  title: 'Genres',
-                  rowIcon: ThemedIconSlot.genre,
-                  keyOf: (track) => track.genre,
-                  unknownLabel: 'Unknown Genre',
-                  countLabel: (n) => '$n track${n == 1 ? '' : 's'}',
+                ListTile(
+                  leading: ThemedIcon(
+                    ThemedIconSlot.genre,
+                    color: theme.colors.textSecondary,
+                  ),
+                  title: Text(
+                    'Genres',
+                    style: TextStyle(color: theme.colors.textPrimary),
+                  ),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => GroupedBrowseScreen(
+                        title: 'Genres',
+                        rowIcon: ThemedIconSlot.genre,
+                        keyOf: (track) => track.genre,
+                        unknownLabel: 'Unknown Genre',
+                        countLabel: (n) => '$n track${n == 1 ? '' : 's'}',
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          ),
-          ListTile(
-            leading: ThemedIcon(
-              ThemedIconSlot.folder,
-              color: theme.colors.textSecondary,
-            ),
-            title: Text(
-              'Folders',
-              style: TextStyle(color: theme.colors.textPrimary),
-            ),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => GroupedBrowseScreen(
-                  title: 'Folders',
-                  rowIcon: ThemedIconSlot.folder,
-                  // Full parent directory as the key (uniqueness — see
-                  // GroupedBrowseScreen's _Group doc comment), just the
-                  // last path segment as what's actually shown.
-                  keyOf: (track) => p.dirname(track.filePath),
-                  displayLabel: (key) => p.basename(key),
-                  unknownLabel: 'Unknown Folder',
-                  countLabel: (n) => '$n track${n == 1 ? '' : 's'}',
+                ListTile(
+                  leading: ThemedIcon(
+                    ThemedIconSlot.folder,
+                    color: theme.colors.textSecondary,
+                  ),
+                  title: Text(
+                    'Folders',
+                    style: TextStyle(color: theme.colors.textPrimary),
+                  ),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => GroupedBrowseScreen(
+                        title: 'Folders',
+                        rowIcon: ThemedIconSlot.folder,
+                        // Full parent directory as the key (uniqueness — see
+                        // GroupedBrowseScreen's _Group doc comment), just the
+                        // last path segment as what's actually shown.
+                        keyOf: (track) => p.dirname(track.filePath),
+                        displayLabel: (key) => p.basename(key),
+                        unknownLabel: 'Unknown Folder',
+                        countLabel: (n) => '$n track${n == 1 ? '' : 's'}',
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          ),
-          ListTile(
-            leading: ThemedIcon(
-              ThemedIconSlot.recentlyPlayed,
-              color: theme.colors.textSecondary,
-            ),
-            title: Text(
-              'Recently Played',
-              style: TextStyle(color: theme.colors.textPrimary),
-            ),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const RecentlyPlayedScreen()),
+                ListTile(
+                  leading: ThemedIcon(
+                    ThemedIconSlot.recentlyPlayed,
+                    color: theme.colors.textSecondary,
+                  ),
+                  title: Text(
+                    'Recently Played',
+                    style: TextStyle(color: theme.colors.textPrimary),
+                  ),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const RecentlyPlayedScreen(),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

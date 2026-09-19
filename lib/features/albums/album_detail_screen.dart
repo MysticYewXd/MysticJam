@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/format_duration.dart';
 import '../../core/library/database.dart';
 import '../../core/playback/playback_controller.dart';
 import '../../core/theme/theme_provider.dart';
@@ -10,6 +9,8 @@ import '../../widgets/themed/track_art.dart';
 import '../library/track_actions.dart';
 import '../now_playing/now_playing_screen.dart';
 import '../playlists/playlist_actions.dart';
+import '../../widgets/themed/round_buttons.dart';
+import '../../widgets/themed/track_row.dart';
 
 /// Track listing for a single album — [tracks] are already the album's
 /// tracks (passed in from AlbumsScreen's grouping), so this is read-only,
@@ -86,10 +87,10 @@ class AlbumDetailScreen extends ConsumerWidget {
                     children: [
                       Text(
                         album,
-                        style: TextStyle(
+                        style: theme.typography.display(
+                          28,
                           color: theme.colors.textPrimary,
-                          fontSize: theme.typography.headerSize - 2,
-                          fontWeight: theme.typography.headerWeight,
+                          height: 1.15,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -122,49 +123,34 @@ class AlbumDetailScreen extends ConsumerWidget {
                     onPlay: () =>
                         _playTrack(context, ref, orderedTracks, index),
                   ),
-                  child: ListTile(
-                    leading: SizedBox(
-                      width: 24,
-                      child: Text(
-                        track.trackNumber?.toString() ?? '–',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: theme.colors.textSecondary,
-                          fontSize: 13,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 2,
+                    ),
+                    child: TrackRow(
+                      track: track,
+                      subtitle: track.artist,
+                      showFormat: false,
+                      leading: SizedBox(
+                        width: 28,
+                        child: Text(
+                          track.trackNumber?.toString() ?? '–',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: theme.colors.textFaint,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
-                    ),
-                    title: Text(
-                      track.title,
-                      style: TextStyle(color: theme.colors.textPrimary),
-                    ),
-                    subtitle: track.artist != null
-                        ? Text(
-                            track.artist!,
-                            style: TextStyle(color: theme.colors.textSecondary),
-                          )
-                        : null,
-                    onTap: () => _playTrack(context, ref, orderedTracks, index),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (track.durationMs != null) ...[
-                          Text(
-                            formatDuration(
-                              Duration(milliseconds: track.durationMs!),
-                            ),
-                            style: TextStyle(
-                              color: theme.colors.textSecondary,
-                              fontSize: 11,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        IconButton(
-                          icon: ThemedIcon(
-                            ThemedIconSlot.playlistAdd,
-                            color: theme.colors.textSecondary,
-                          ),
+                      onTap: () =>
+                          _playTrack(context, ref, orderedTracks, index),
+                      actions: [
+                        RoundIconButton(
+                          slot: ThemedIconSlot.playlistAdd,
+                          tooltip: 'Add to playlist',
+                          diameter: 36,
                           onPressed: () =>
                               showAddToPlaylistSheet(context, ref, [track]),
                         ),

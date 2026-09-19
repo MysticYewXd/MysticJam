@@ -1,0 +1,25 @@
+<!-- @dsCard group="Foundations" height=330 subtitle="24px grid, 1.75 stroke, round caps" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Icons — preview</title>
+<style>
+  html, body { margin: 0; }
+  body { background: var(--surface-0); }
+  .pv { padding: var(--space-5); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: var(--space-2); }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-4) var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--surface-1); color: var(--ink); }
+  .cell .caption { color: var(--ink-muted); }
+</style>
+</head>
+<body>
+<div id="root" class="vs-stage pv"><div class="grid" id="grid"></div></div>
+<script>
+  var V = window.Vesper;
+  document.getElementById('grid').innerHTML = V.iconNames.map(function (n) {
+    return '<div class="cell">' + V.icon(n, 24) + '<span class="caption">' + n + '</span></div>';
+  }).join('');
+</script>
+</body>
+</html>

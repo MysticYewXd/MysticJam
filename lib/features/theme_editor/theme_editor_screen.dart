@@ -78,7 +78,7 @@ class ThemeEditorScreen extends ConsumerWidget {
         children: [
           _SectionHeader('Built-in', theme: theme),
           _ThemeRow(
-            name: 'Default',
+            name: 'Vesper Dusk',
             colors: defaultTheme.colors,
             selected: libraryState.activeThemeId == null,
             theme: theme,

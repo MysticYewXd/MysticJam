@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/format_duration.dart';
 import '../../core/library/database.dart';
 import '../../core/playback/playback_controller.dart';
 import '../../core/theme/theme_provider.dart';
@@ -9,6 +8,8 @@ import '../../widgets/themed/themed_icon.dart';
 import '../library/track_actions.dart';
 import '../now_playing/now_playing_screen.dart';
 import '../playlists/playlist_actions.dart';
+import '../../widgets/themed/round_buttons.dart';
+import '../../widgets/themed/track_row.dart';
 
 /// Plain track-list detail screen shared by every "browse by X" group tap —
 /// an artist, a genre, or a folder all just mean "here are the tracks in
@@ -60,38 +61,21 @@ class GroupDetailScreen extends ConsumerWidget {
                     position: details.globalPosition,
                     onPlay: () => _playTrack(context, ref, index),
                   ),
-                  child: ListTile(
-                    title: Text(
-                      track.title,
-                      style: TextStyle(color: theme.colors.textPrimary),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 2,
                     ),
-                    subtitle: track.artist != null
-                        ? Text(
-                            track.artist!,
-                            style: TextStyle(color: theme.colors.textSecondary),
-                          )
-                        : null,
-                    onTap: () => _playTrack(context, ref, index),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (track.durationMs != null) ...[
-                          Text(
-                            formatDuration(
-                              Duration(milliseconds: track.durationMs!),
-                            ),
-                            style: TextStyle(
-                              color: theme.colors.textSecondary,
-                              fontSize: 11,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        IconButton(
-                          icon: ThemedIcon(
-                            ThemedIconSlot.playlistAdd,
-                            color: theme.colors.textSecondary,
-                          ),
+                    child: TrackRow(
+                      track: track,
+                      subtitle: track.artist,
+                      showFormat: false,
+                      onTap: () => _playTrack(context, ref, index),
+                      actions: [
+                        RoundIconButton(
+                          slot: ThemedIconSlot.playlistAdd,
+                          tooltip: 'Add to playlist',
+                          diameter: 36,
                           onPressed: () =>
                               showAddToPlaylistSheet(context, ref, [track]),
                         ),

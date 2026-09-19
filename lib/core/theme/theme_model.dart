@@ -11,6 +11,7 @@ enum LibraryLayout { list, grid }
 /// extensible to arbitrary scripting — themes only ever pick from this set.
 enum AnimationPrimitive { fade, slide, scale, morph, crossfade }
 
+// ignore_for_file: prefer_initializing_formals
 class AppColorScheme {
   final Color background;
   final Color surface;
@@ -24,6 +25,15 @@ class AppColorScheme {
   final Color controlInactive;
   final Color error;
 
+  // Optional refinements for richer palettes (e.g. Vesper). Themes saved
+  // before these existed leave them null and get a value derived from the
+  // core slots, so old JSON keeps loading and looking sensible.
+  final Color? _chrome;
+  final Color? _line;
+  final Color? _onPrimary;
+  final Color? _accentSoft;
+  final Color? _textFaint;
+
   const AppColorScheme({
     required this.background,
     required this.surface,
@@ -36,11 +46,88 @@ class AppColorScheme {
     required this.controlActive,
     required this.controlInactive,
     required this.error,
-  });
+    Color? chrome,
+    Color? line,
+    Color? onPrimary,
+    Color? accentSoft,
+    Color? textFaint,
+  }) : _chrome = chrome,
+       _line = line,
+       _onPrimary = onPrimary,
+       _accentSoft = accentSoft,
+       _textFaint = textFaint;
+
+  /// Persistent chrome (dock, player bar) sitting on [background].
+  Color get chrome => _chrome ?? surface;
+
+  /// Decorative hairline between rows and panels.
+  Color get line => _line ?? textSecondary.withValues(alpha: 0.18);
+
+  /// Icon/text colour drawn on a [primary] fill.
+  Color get onPrimary =>
+      _onPrimary ??
+      (ThemeData.estimateBrightnessForColor(primary) == Brightness.dark
+          ? const Color(0xFFFFFFFF)
+          : const Color(0xFF111111));
+
+  /// Translucent wash for selected/hovered rows.
+  Color get accentSoft => _accentSoft ?? primary.withValues(alpha: 0.18);
+
+  /// Tertiary text: durations, track numbers, captions.
+  Color get textFaint => _textFaint ?? textSecondary.withValues(alpha: 0.85);
+
+  /// The optional slots the theme set explicitly, keyed for JSON storage.
+  Map<String, Color> get explicitExtras => {
+    if (_chrome != null) 'chrome': _chrome,
+    if (_line != null) 'line': _line,
+    if (_onPrimary != null) 'onPrimary': _onPrimary,
+    if (_accentSoft != null) 'accentSoft': _accentSoft,
+    if (_textFaint != null) 'textFaint': _textFaint,
+  };
+
+  AppColorScheme copyWith({
+    Color? background,
+    Color? surface,
+    Color? primary,
+    Color? accent,
+    Color? textPrimary,
+    Color? textSecondary,
+    Color? progressBar,
+    Color? progressBarTrack,
+    Color? controlActive,
+    Color? controlInactive,
+    Color? error,
+  }) {
+    return AppColorScheme(
+      background: background ?? this.background,
+      surface: surface ?? this.surface,
+      primary: primary ?? this.primary,
+      accent: accent ?? this.accent,
+      textPrimary: textPrimary ?? this.textPrimary,
+      textSecondary: textSecondary ?? this.textSecondary,
+      progressBar: progressBar ?? this.progressBar,
+      progressBarTrack: progressBarTrack ?? this.progressBarTrack,
+      controlActive: controlActive ?? this.controlActive,
+      controlInactive: controlInactive ?? this.controlInactive,
+      error: error ?? this.error,
+      chrome: _chrome,
+      line: _line,
+      onPrimary: _onPrimary,
+      accentSoft: _accentSoft,
+      textFaint: _textFaint,
+    );
+  }
 }
+
+/// The Vesper families bundled under assets/fonts.
+const String sansFontFamily = 'DM Sans';
+const String displayFontFamily = 'Fraunces';
 
 class AppTypography {
   final String fontFamily;
+
+  /// Serif used for titles and headings (the Vesper display styles).
+  final String displayFamily;
   final double headerSize;
   final FontWeight headerWeight;
   final double bodySize;
@@ -50,6 +137,7 @@ class AppTypography {
 
   const AppTypography({
     required this.fontFamily,
+    this.displayFamily = displayFontFamily,
     required this.headerSize,
     required this.headerWeight,
     required this.bodySize,
@@ -57,6 +145,18 @@ class AppTypography {
     required this.lyricsSize,
     required this.lyricsWeight,
   });
+
+  /// A Vesper display style (Fraunces, medium). Only weight 500 is bundled,
+  /// so it isn't parameterised — asking for bolder would make the engine
+  /// synthesise a fake bold.
+  TextStyle display(double size, {required Color color, double? height}) =>
+      TextStyle(
+        fontFamily: displayFamily,
+        fontSize: size,
+        fontWeight: FontWeight.w500,
+        height: height,
+        color: color,
+      );
 }
 
 class AppShapes {

@@ -1,0 +1,45 @@
+<!-- @dsCard group="Actions" height=400 subtitle="Transport, icon buttons, pill buttons, chips" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Button — preview</title>
+<style>
+  html, body { margin: 0; }
+  body { background: var(--surface-0); }
+  .pv { display: flex; flex-direction: column; gap: var(--space-6); padding: var(--space-5) var(--space-6); }
+  .sec { display: flex; flex-direction: column; gap: var(--space-3); }
+  .sec .overline { color: var(--ink-faint); }
+  .rowx { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-5); }
+  .stateblock { display: flex; align-items: center; gap: var(--space-3); }
+  .stateblock .caption { color: var(--ink-faint); }
+</style>
+</head>
+<body>
+<div id="root" class="vs-stage pv"></div>
+<script>
+  var V = window.Vesper;
+  var t = V.sample.tracks[0];
+  document.getElementById('root').innerHTML =
+    '<div class="sec"><div class="overline">Transport</div><div class="rowx">' +
+      '<div class="stateblock">' + V.transport({ playing: false, shuffle: true }) + '<span class="caption">Paused, shuffle on</span></div>' +
+      '<div class="stateblock">' + V.transport({ playing: true, repeat: true }) + '<span class="caption">Playing, repeat on</span></div>' +
+      '<div class="stateblock">' + V.transport({ size: 'sm', playing: true }) + '<span class="caption">Compact (player bar)</span></div>' +
+    '</div></div>' +
+    '<div class="sec"><div class="overline">Icon buttons</div><div class="rowx">' +
+      '<div class="stateblock">' + V.button('heart', 'Like', { sm: true, cls: 'vs-btn--fav', pressed: false, size: 20 }) + '<span class="caption">Like</span></div>' +
+      '<div class="stateblock">' + V.button('heart', 'Unlike', { sm: true, cls: 'vs-btn--fav', pressed: true, size: 20 }) + '<span class="caption">Liked</span></div>' +
+      '<div class="stateblock">' + V.button('more', 'More options', { sm: true, size: 20 }) + '<span class="caption">More</span></div>' +
+      '<div class="stateblock">' + V.button('queue', 'Queue', { size: 22 }) + '<span class="caption">Queue</span></div>' +
+      '<div class="stateblock">' + V.button('shuffle', 'Shuffle', { toggle: true, pressed: true, size: 22 }) + '<span class="caption">Toggle on</span></div>' +
+    '</div></div>' +
+    '<div class="sec"><div class="overline">Pill buttons and chips</div><div class="rowx">' +
+      '<button type="button" class="vs-cta">' + V.icon('play', 18) + 'Play</button>' +
+      '<button type="button" class="vs-cta vs-cta--ghost">' + V.icon('shuffle', 18) + 'Shuffle</button>' +
+      '<span class="vs-chip">' + V.icon('check', 14) + 'Lossless</span>' +
+      '<span class="vs-chip">Downloaded</span>' +
+    '</div></div>';
+  V.mount(document);
+</script>
+</body>
+</html>

@@ -6,6 +6,7 @@ import '../../core/library/library_providers.dart';
 import '../../core/theme/theme_provider.dart';
 import '../../widgets/themed/themed_card.dart';
 import '../../widgets/themed/themed_search_bar.dart';
+import '../now_playing/mini_player.dart';
 import '../../widgets/themed/track_art.dart';
 import 'album_detail_screen.dart';
 
@@ -80,6 +81,7 @@ class _AlbumsScreenState extends ConsumerState<AlbumsScreen> {
                   onChanged: (value) => setState(() => _query = value),
                 ),
               ),
+              const MiniPlayer(),
               Expanded(
                 child: albums.isEmpty
                     ? Center(

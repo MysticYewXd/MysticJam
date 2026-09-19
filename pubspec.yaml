@@ -80,6 +80,23 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # Vesper type system (SIL OFL 1.1, see assets/fonts/OFL.txt). Static
+  # instances of the design system's variable fonts, so weights map through
+  # ordinary FontWeight instead of variable-axis settings.
+  fonts:
+    - family: DM Sans
+      fonts:
+        - asset: assets/fonts/DMSans-400.ttf
+          weight: 400
+        - asset: assets/fonts/DMSans-500.ttf
+          weight: 500
+        - asset: assets/fonts/DMSans-600.ttf
+          weight: 600
+    - family: Fraunces
+      fonts:
+        - asset: assets/fonts/Fraunces-500.ttf
+          weight: 500
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

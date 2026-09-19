@@ -1,0 +1,21 @@
+<!-- @dsCard group="Playback" width=1080 height=150 subtitle="Persistent bar for browsing while playing" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PlayerBar — preview</title>
+<style>
+  html, body { margin: 0; }
+  body { background: var(--surface-0); }
+  .pv { padding: var(--space-5) var(--space-6); }
+</style>
+</head>
+<body>
+<div id="root" class="vs-stage pv"></div>
+<script>
+  var V = window.Vesper;
+  document.getElementById('root').innerHTML = V.bar(V.sample.tracks[2], { elapsed: 122, playing: true });
+  V.mount(document);
+</script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!-- @dsCard group="Playback" height=300 subtitle="Seek bar with times, and volume" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Slider — preview</title>
+<style>
+  html, body { margin: 0; }
+  body { background: var(--surface-0); }
+  .pv { display: flex; flex-direction: column; gap: var(--space-6); padding: var(--space-5) var(--space-6); max-width: 720px; }
+  .sec { display: flex; flex-direction: column; gap: var(--space-2); }
+  .sec .overline { color: var(--ink-faint); }
+  .cap { color: var(--ink-faint); }
+  .card { padding: var(--space-4) var(--space-5); border-radius: var(--radius-lg); background: var(--surface-2); }
+</style>
+</head>
+<body>
+<div id="root" class="vs-stage pv">
+  <div class="sec">
+    <div class="overline">Seek bar (drag, click or use the arrow keys)</div>
+    <div class="card" data-vs-player data-duration="222" data-elapsed="94" id="p1"></div>
+  </div>
+  <div class="sec">
+    <div class="overline">Volume</div>
+    <div class="card" id="p2"></div>
+  </div>
+</div>
+<script>
+  var V = window.Vesper;
+  document.getElementById('p1').innerHTML = V.progress();
+  document.getElementById('p2').innerHTML = V.volume(64);
+  V.mount(document);
+</script>
+</body>
+</html>

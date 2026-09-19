@@ -26,13 +26,19 @@ class ThemeDetailEditorScreen extends ConsumerStatefulWidget {
   /// versus being a fresh duplicate-from-preset/new theme (Save creates).
   final bool isNew;
 
-  const ThemeDetailEditorScreen({super.key, required this.draft, required this.isNew});
+  const ThemeDetailEditorScreen({
+    super.key,
+    required this.draft,
+    required this.isNew,
+  });
 
   @override
-  ConsumerState<ThemeDetailEditorScreen> createState() => _ThemeDetailEditorScreenState();
+  ConsumerState<ThemeDetailEditorScreen> createState() =>
+      _ThemeDetailEditorScreenState();
 }
 
-class _ThemeDetailEditorScreenState extends ConsumerState<ThemeDetailEditorScreen> {
+class _ThemeDetailEditorScreenState
+    extends ConsumerState<ThemeDetailEditorScreen> {
   late CustomThemeData _draft;
   late TextEditingController _nameController;
 
@@ -49,14 +55,26 @@ class _ThemeDetailEditorScreenState extends ConsumerState<ThemeDetailEditorScree
     super.dispose();
   }
 
-  void _update({AppColorScheme? colors, AppTypography? typography, AppShapes? shapes}) {
+  void _update({
+    AppColorScheme? colors,
+    AppTypography? typography,
+    AppShapes? shapes,
+  }) {
     setState(() {
-      _draft = _draft.copyWith(colors: colors, typography: typography, shapes: shapes);
+      _draft = _draft.copyWith(
+        colors: colors,
+        typography: typography,
+        shapes: shapes,
+      );
     });
   }
 
   Future<void> _save() async {
-    final named = _draft.copyWith(name: _nameController.text.trim().isEmpty ? 'Untitled' : _nameController.text.trim());
+    final named = _draft.copyWith(
+      name: _nameController.text.trim().isEmpty
+          ? 'Untitled'
+          : _nameController.text.trim(),
+    );
     final library = ref.read(themeLibraryProvider.notifier);
     if (widget.isNew) {
       final saved = await library.createTheme(named);
@@ -89,9 +107,7 @@ class _ThemeDetailEditorScreenState extends ConsumerState<ThemeDetailEditorScree
       backgroundColor: baseTheme.colors.background,
       appBar: AppBar(
         title: Text(widget.isNew ? 'New Theme' : 'Edit Theme'),
-        actions: [
-          TextButton(onPressed: _save, child: const Text('Save')),
-        ],
+        actions: [TextButton(onPressed: _save, child: const Text('Save'))],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -121,7 +137,9 @@ class _ThemeDetailEditorScreenState extends ConsumerState<ThemeDetailEditorScree
             label: 'Primary',
             value: _draft.colors.primary,
             theme: baseTheme,
-            onChanged: (c) => _update(colors: _colorsWith(primary: c, progressBar: c)),
+            onChanged: (c) => _update(
+              colors: _colorsWith(primary: c, progressBar: c),
+            ),
           ),
           ColorField(
             label: 'Accent',
@@ -133,13 +151,17 @@ class _ThemeDetailEditorScreenState extends ConsumerState<ThemeDetailEditorScree
             label: 'Text (primary)',
             value: _draft.colors.textPrimary,
             theme: baseTheme,
-            onChanged: (c) => _update(colors: _colorsWith(textPrimary: c, controlActive: c)),
+            onChanged: (c) => _update(
+              colors: _colorsWith(textPrimary: c, controlActive: c),
+            ),
           ),
           ColorField(
             label: 'Text (secondary)',
             value: _draft.colors.textSecondary,
             theme: baseTheme,
-            onChanged: (c) => _update(colors: _colorsWith(textSecondary: c, controlInactive: c)),
+            onChanged: (c) => _update(
+              colors: _colorsWith(textSecondary: c, controlInactive: c),
+            ),
           ),
           ColorField(
             label: 'Progress track',
@@ -161,13 +183,15 @@ class _ThemeDetailEditorScreenState extends ConsumerState<ThemeDetailEditorScree
             min: 16,
             max: 32,
             theme: baseTheme,
-            onChanged: (v) => _update(typography: _typographyWith(headerSize: v)),
+            onChanged: (v) =>
+                _update(typography: _typographyWith(headerSize: v)),
           ),
           _WeightDropdown(
             label: 'Header weight',
             value: _draft.typography.headerWeight,
             theme: baseTheme,
-            onChanged: (w) => _update(typography: _typographyWith(headerWeight: w)),
+            onChanged: (w) =>
+                _update(typography: _typographyWith(headerWeight: w)),
           ),
           _SizeSlider(
             label: 'Body size',
@@ -181,7 +205,8 @@ class _ThemeDetailEditorScreenState extends ConsumerState<ThemeDetailEditorScree
             label: 'Body weight',
             value: _draft.typography.bodyWeight,
             theme: baseTheme,
-            onChanged: (w) => _update(typography: _typographyWith(bodyWeight: w)),
+            onChanged: (w) =>
+                _update(typography: _typographyWith(bodyWeight: w)),
           ),
           _SizeSlider(
             label: 'Lyrics size',
@@ -189,7 +214,8 @@ class _ThemeDetailEditorScreenState extends ConsumerState<ThemeDetailEditorScree
             min: 12,
             max: 24,
             theme: baseTheme,
-            onChanged: (v) => _update(typography: _typographyWith(lyricsSize: v)),
+            onChanged: (v) =>
+                _update(typography: _typographyWith(lyricsSize: v)),
           ),
           const SizedBox(height: 24),
           _SectionLabel('Shape', theme: baseTheme),
@@ -199,11 +225,13 @@ class _ThemeDetailEditorScreenState extends ConsumerState<ThemeDetailEditorScree
             min: 0,
             max: 28,
             theme: baseTheme,
-            onChanged: (v) => _update(shapes: AppShapes(
-              cornerRadius: v,
-              borderWidth: _draft.shapes.borderWidth,
-              cardElevation: _draft.shapes.cardElevation,
-            )),
+            onChanged: (v) => _update(
+              shapes: AppShapes(
+                cornerRadius: v,
+                borderWidth: _draft.shapes.borderWidth,
+                cardElevation: _draft.shapes.cardElevation,
+              ),
+            ),
           ),
           const SizedBox(height: 32),
         ],
@@ -224,19 +252,18 @@ class _ThemeDetailEditorScreenState extends ConsumerState<ThemeDetailEditorScree
     Color? controlInactive,
     Color? error,
   }) {
-    final c = _draft.colors;
-    return AppColorScheme(
-      background: background ?? c.background,
-      surface: surface ?? c.surface,
-      primary: primary ?? c.primary,
-      accent: accent ?? c.accent,
-      textPrimary: textPrimary ?? c.textPrimary,
-      textSecondary: textSecondary ?? c.textSecondary,
-      progressBar: progressBar ?? c.progressBar,
-      progressBarTrack: progressBarTrack ?? c.progressBarTrack,
-      controlActive: controlActive ?? c.controlActive,
-      controlInactive: controlInactive ?? c.controlInactive,
-      error: error ?? c.error,
+    return _draft.colors.copyWith(
+      background: background,
+      surface: surface,
+      primary: primary,
+      accent: accent,
+      textPrimary: textPrimary,
+      textSecondary: textSecondary,
+      progressBar: progressBar,
+      progressBarTrack: progressBarTrack,
+      controlActive: controlActive,
+      controlInactive: controlInactive,
+      error: error,
     );
   }
 
@@ -251,6 +278,7 @@ class _ThemeDetailEditorScreenState extends ConsumerState<ThemeDetailEditorScree
     final t = _draft.typography;
     return AppTypography(
       fontFamily: t.fontFamily,
+      displayFamily: t.displayFamily,
       headerSize: headerSize ?? t.headerSize,
       headerWeight: headerWeight ?? t.headerWeight,
       bodySize: bodySize ?? t.bodySize,
@@ -306,7 +334,10 @@ class _SizeSlider extends StatelessWidget {
       children: [
         SizedBox(
           width: 100,
-          child: Text(label, style: TextStyle(color: theme.colors.textPrimary, fontSize: 13)),
+          child: Text(
+            label,
+            style: TextStyle(color: theme.colors.textPrimary, fontSize: 13),
+          ),
         ),
         Expanded(
           child: Slider(
@@ -319,7 +350,10 @@ class _SizeSlider extends StatelessWidget {
         ),
         SizedBox(
           width: 28,
-          child: Text(value.round().toString(), style: TextStyle(color: theme.colors.textSecondary, fontSize: 12)),
+          child: Text(
+            value.round().toString(),
+            style: TextStyle(color: theme.colors.textSecondary, fontSize: 12),
+          ),
         ),
       ],
     );
@@ -345,7 +379,10 @@ class _WeightDropdown extends StatelessWidget {
       children: [
         SizedBox(
           width: 100,
-          child: Text(label, style: TextStyle(color: theme.colors.textPrimary, fontSize: 13)),
+          child: Text(
+            label,
+            style: TextStyle(color: theme.colors.textPrimary, fontSize: 13),
+          ),
         ),
         Expanded(
           child: DropdownButton<FontWeight>(
@@ -354,7 +391,9 @@ class _WeightDropdown extends StatelessWidget {
             dropdownColor: theme.colors.surface,
             style: TextStyle(color: theme.colors.textPrimary),
             items: _weightOptions.entries
-                .map((e) => DropdownMenuItem(value: e.value, child: Text(e.key)))
+                .map(
+                  (e) => DropdownMenuItem(value: e.value, child: Text(e.key)),
+                )
                 .toList(),
             onChanged: (w) {
               if (w != null) onChanged(w);
@@ -392,7 +431,10 @@ class _PreviewCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             'Now playing preview',
-            style: TextStyle(color: theme.colors.textSecondary, fontSize: theme.typography.bodySize),
+            style: TextStyle(
+              color: theme.colors.textSecondary,
+              fontSize: theme.typography.bodySize,
+            ),
           ),
           const SizedBox(height: 16),
           ClipRRect(
@@ -409,7 +451,11 @@ class _PreviewCard extends StatelessWidget {
             children: [
               Icon(Icons.skip_previous, color: theme.colors.controlActive),
               const SizedBox(width: 12),
-              Icon(Icons.play_circle_fill, color: theme.colors.primary, size: 36),
+              Icon(
+                Icons.play_circle_fill,
+                color: theme.colors.primary,
+                size: 36,
+              ),
               const SizedBox(width: 12),
               Icon(Icons.skip_next, color: theme.colors.controlInactive),
               const Spacer(),

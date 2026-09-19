@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/playback/playback_controller.dart';
-import '../../core/theme/theme_provider.dart';
+import '../../core/theme/album_palette.dart';
+import '../../widgets/themed/round_buttons.dart';
 import '../../widgets/themed/themed_icon.dart';
 import '../../widgets/themed/track_art.dart';
 import 'now_playing_screen.dart';
@@ -19,18 +20,20 @@ class MiniPlayer extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = ref.watch(themeProvider);
+    final theme = ref.watch(albumAdaptedThemeProvider);
     final playback = ref.watch(playbackControllerProvider);
     final controller = ref.read(playbackControllerProvider.notifier);
     final track = playback.currentTrack;
 
     if (track == null) return const SizedBox.shrink();
 
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
       margin: const EdgeInsets.fromLTRB(8, 8, 8, 4),
       decoration: BoxDecoration(
-        color: theme.colors.surface,
-        borderRadius: BorderRadius.circular(theme.shapes.cornerRadius),
+        color: theme.colors.chrome,
+        borderRadius: BorderRadius.circular(theme.shapes.cornerRadius * 1.5),
         // A little more presence than before (was blurRadius 4/alpha 0.2) —
         // matches the same "floating glass" family as the Dock beneath it
         // (see widgets/themed/dock.dart) rather than reading as a flat card
@@ -82,9 +85,9 @@ class MiniPlayer extends ConsumerWidget {
                               track.title,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
+                              style: theme.typography.display(
+                                17,
                                 color: theme.colors.textPrimary,
-                                fontWeight: FontWeight.w600,
                               ),
                             ),
                             if (track.artist != null)
@@ -100,13 +103,26 @@ class MiniPlayer extends ConsumerWidget {
                           ],
                         ),
                       ),
-                      IconButton(
-                        icon: ThemedIcon(
-                          playback.isPlaying
-                              ? ThemedIconSlot.pause
-                              : ThemedIconSlot.play,
-                        ),
+                      RoundIconButton(
+                        slot: ThemedIconSlot.previous,
+                        tooltip: 'Previous',
+                        diameter: 36,
+                        onPressed: playback.hasPrevious
+                            ? controller.previous
+                            : null,
+                      ),
+                      const SizedBox(width: 4),
+                      PlayButton(
+                        playing: playback.isPlaying,
+                        diameter: 44,
                         onPressed: controller.togglePlayPause,
+                      ),
+                      const SizedBox(width: 4),
+                      RoundIconButton(
+                        slot: ThemedIconSlot.next,
+                        tooltip: 'Next',
+                        diameter: 36,
+                        onPressed: playback.hasNext ? controller.next : null,
                       ),
                     ],
                   ),

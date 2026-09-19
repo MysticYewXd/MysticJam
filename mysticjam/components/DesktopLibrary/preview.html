@@ -1,0 +1,35 @@
+<!-- @dsCard group="Layouts" width=1328 height=810 subtitle="Playlist view with the player bar, 1280 by 760" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DesktopLibrary — preview</title>
+<style>
+  html, body { margin: 0; }
+  body { background: var(--surface-0); }
+  .pv { padding: var(--space-5) var(--space-5); }
+</style>
+</head>
+<body>
+<div id="root" class="vs-stage pv"></div>
+<script>
+  var V = window.Vesper;
+  var tracks = V.sample.tracks;
+  document.getElementById('root').innerHTML =
+    '<div class="vs-window">' + V.sidebar('Home') +
+      '<main class="vs-main">' +
+        '<div class="vs-main__top"><div>' + V.button('chevron-left', 'Back', { size: 22 }) + V.button('chevron-right', 'Forward', { size: 22 }) + '</div>' +
+        '<div>' + V.button('more', 'More options', { size: 22 }) + '</div></div>' +
+        '<div class="vs-pl-head">' + V.art('harbour', 'vs-art--lg', 'Evening Drift cover') +
+          '<div class="vs-pl-head__text"><span class="overline caption">Playlist</span><h1 class="display-lg">Evening Drift</h1>' +
+          '<p class="body">Seven quiet songs for the last hour of light. 27 minutes.</p>' +
+          '<div class="vs-pl-head__actions"><button type="button" class="vs-cta">' + V.icon('play', 18) + 'Play</button>' +
+          '<button type="button" class="vs-cta vs-cta--ghost">' + V.icon('shuffle', 18) + 'Shuffle</button></div></div></div>' +
+        '<div class="vs-main__scroll">' + V.list(tracks.slice(0, 5), { current: 0 }) + '</div>' +
+        V.bar(tracks[0], { elapsed: 84, playing: true }) +
+      '</main>' +
+    '</div>';
+  V.mount(document);
+</script>
+</body>
+</html>

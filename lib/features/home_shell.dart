@@ -6,12 +6,12 @@ import '../widgets/themed/themed_icon.dart';
 import 'albums/albums_screen.dart';
 import 'browse/browse_hub_screen.dart';
 import 'library/library_screen.dart';
-import 'now_playing/mini_player.dart';
 import 'playlists/playlists_screen.dart';
 
-/// Root navigation shell: Library/Albums/Playlists tabs with a persistent
-/// MiniPlayer docked above a magnifying Dock (macOS-style — icons grow as
-/// the mouse passes near them; see widgets/themed/dock.dart), so playback
+/// Root navigation shell: Library/Albums/Playlists/Browse tabs over a
+/// magnifying Dock (macOS-style — icons grow as the mouse passes near them;
+/// see widgets/themed/dock.dart). Each tab shows the MiniPlayer at the top
+/// of its own body (under the search bar where there is one) so playback
 /// stays visible and controllable no matter which tab is active.
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
@@ -54,8 +54,6 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const MiniPlayer(),
-                    const SizedBox(height: 10),
                     Dock(
                       items: [
                         DockItem(
