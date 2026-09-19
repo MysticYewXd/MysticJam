@@ -9,14 +9,14 @@ import 'library_model.dart';
 
 part 'database.g.dart';
 
-@DriftDatabase(tables: [Tracks, Playlists, PlaylistTracks])
+@DriftDatabase(tables: [Tracks, Albums, Playlists, PlaylistTracks])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -39,6 +39,15 @@ class AppDatabase extends _$AppDatabase {
         // "Refresh Metadata" re-parses each file and fills them in.
         await m.addColumn(tracks, tracks.genre);
         await m.addColumn(tracks, tracks.trackNumber);
+      }
+      if (from < 6) {
+        // Albums become their own entity. Existing tracks keep every value
+        // they had; their new columns are NULL until they're (re)grouped —
+        // a "Refresh Metadata" re-scan fills them in from the file tags.
+        await m.createTable(albums);
+        await m.addColumn(tracks, tracks.albumId);
+        await m.addColumn(tracks, tracks.albumArtist);
+        await m.addColumn(tracks, tracks.year);
       }
     },
   );

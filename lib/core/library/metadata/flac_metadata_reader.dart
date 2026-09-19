@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'track_metadata.dart';
 import 'track_number_parser.dart';
 import 'vorbis_comment_parser.dart';
+import 'year_parser.dart';
 
 /// Reads Vorbis-comment metadata, cover art, and exact duration directly
 /// from a FLAC file's metadata blocks — pure Dart, hand-rolled since no
@@ -30,6 +31,8 @@ Future<ParsedMetadata> readFlacMetadata(String filePath) async {
     int? durationMs;
     String? genre;
     int? trackNumber;
+    String? albumArtist;
+    int? year;
 
     while (true) {
       final header = await raf.read(4);
@@ -52,6 +55,8 @@ Future<ParsedMetadata> readFlacMetadata(String filePath) async {
         artwork ??= extractPictureFromComments(comments);
         genre ??= comments['GENRE'];
         trackNumber ??= parseLeadingTrackNumber(comments['TRACKNUMBER']);
+        albumArtist ??= comments['ALBUMARTIST'] ?? comments['ALBUM ARTIST'];
+        year ??= parseLeadingYear(comments['DATE'] ?? comments['YEAR']);
       } else if (blockType == 6 && artwork == null) {
         artwork = parseFlacPictureBlock(body);
       }
@@ -67,6 +72,8 @@ Future<ParsedMetadata> readFlacMetadata(String filePath) async {
       durationMs: durationMs,
       genre: genre,
       trackNumber: trackNumber,
+      albumArtist: albumArtist,
+      year: year,
     );
   } catch (_) {
     // Malformed/unreadable file shouldn't block indexing — the scanner

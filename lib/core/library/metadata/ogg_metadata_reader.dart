@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'track_metadata.dart';
 import 'track_number_parser.dart';
 import 'vorbis_comment_parser.dart';
+import 'year_parser.dart';
 
 /// Reads Vorbis-comment metadata and cover art from an OGG-container file
 /// (Vorbis or Opus audio) — pure Dart. OGG wraps its packets in a page
@@ -42,6 +43,8 @@ Future<ParsedMetadata> readOggMetadata(String filePath) async {
           artwork: extractPictureFromComments(comments),
           genre: comments['GENRE'],
           trackNumber: parseLeadingTrackNumber(comments['TRACKNUMBER']),
+          albumArtist: comments['ALBUMARTIST'] ?? comments['ALBUM ARTIST'],
+          year: parseLeadingYear(comments['DATE'] ?? comments['YEAR']),
         );
       }
     }

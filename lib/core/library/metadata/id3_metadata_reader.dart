@@ -5,6 +5,7 @@ import 'package:dart_tags/dart_tags.dart';
 
 import 'track_metadata.dart';
 import 'track_number_parser.dart';
+import 'year_parser.dart';
 
 /// Reads ID3 tags (v1.1 and v2.x) from an MP3 file via package:dart_tags —
 /// pure Dart, no native dependency. ID3v2 is preferred when both are present
@@ -24,6 +25,8 @@ Future<ParsedMetadata> readId3Metadata(String filePath) async {
     String? lyrics;
     String? genre;
     int? trackNumber;
+    String? albumArtist;
+    int? year;
 
     // getTagsFromByteArray runs id3v1 then id3v2 by default — reversed so
     // id3v2's richer values win via ??=, with id3v1 only filling gaps.
@@ -40,6 +43,13 @@ Future<ParsedMetadata> readId3Metadata(String filePath) async {
       // need ID3v1's genre table, which dart_tags doesn't expose publicly.
       genre ??= _normalizeGenre(t['genre']);
       trackNumber ??= parseLeadingTrackNumber(_nonEmpty(t['track']));
+      // dart_tags exposes a handful of frames under short names ('year' for
+      // TYER) and everything else under its raw 4-character frame id — so
+      // album artist arrives as 'TPE2', and ID3v2.4's date frame as 'TDRC'
+      // (TYER was dropped from 2.4), both verified against dart_tags'
+      // frame-key mapping rather than assumed.
+      albumArtist ??= _nonEmpty(t['TPE2']);
+      year ??= parseLeadingYear(_nonEmpty(t['year']) ?? _nonEmpty(t['TDRC']));
 
       if (artwork == null) {
         final pictures = t['picture'];
@@ -70,6 +80,8 @@ Future<ParsedMetadata> readId3Metadata(String filePath) async {
       lyrics: lyrics,
       genre: genre,
       trackNumber: trackNumber,
+      albumArtist: albumArtist,
+      year: year,
     );
   } catch (_) {
     // Corrupt/unreadable tags shouldn't block indexing — the scanner falls

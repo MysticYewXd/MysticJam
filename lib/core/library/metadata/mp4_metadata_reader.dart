@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'track_metadata.dart';
+import 'year_parser.dart';
 
 const _tagTitle = '©nam';
 const _tagArtist = '©ART';
@@ -10,6 +11,8 @@ const _tagAlbum = '©alb';
 const _tagCover = 'covr';
 const _tagGenre = '©gen';
 const _tagTrackNumber = 'trkn';
+const _tagAlbumArtist = 'aART';
+const _tagYear = '©day';
 
 /// Reads iTunes-style metadata from an M4A/AAC file's MP4 atom tree — pure
 /// Dart. MP4 is a tree of size-prefixed "atoms"/"boxes"; the tags live at
@@ -53,6 +56,8 @@ Future<ParsedMetadata> readMp4Metadata(String filePath) async {
       // decision in id3_metadata_reader.dart's genre handling).
       genre: _findIlstString(ilst, _tagGenre),
       trackNumber: _findIlstTrackNumber(ilst),
+      albumArtist: _findIlstString(ilst, _tagAlbumArtist),
+      year: parseLeadingYear(_findIlstString(ilst, _tagYear)),
     );
   } catch (_) {
     // Malformed/unreadable file shouldn't block indexing — the scanner

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'track_metadata.dart';
 import 'track_number_parser.dart';
+import 'year_parser.dart';
 
 // ASF object GUIDs, in the mixed-endian byte order the format actually
 // stores them in (first 3 fields little-endian, last 8 bytes as-is) rather
@@ -101,6 +102,8 @@ Future<ParsedMetadata> readWmaMetadata(String filePath) async {
       String? album;
       String? genre;
       int? trackNumber;
+      String? albumArtist;
+      int? year;
 
       for (var i = 0; i < headerObjectCount && pos + 24 <= length; i++) {
         await raf.setPosition(pos);
@@ -129,6 +132,8 @@ Future<ParsedMetadata> readWmaMetadata(String filePath) async {
           // Documented limitation, not a bug: this reader is already the
           // most scoped-down of the eight formats supported.
           trackNumber ??= parseLeadingTrackNumber(tags['WM/TRACKNUMBER']);
+          albumArtist ??= _nonEmpty(tags['WM/ALBUMARTIST']);
+          year ??= parseLeadingYear(tags['WM/YEAR']);
         }
 
         pos += objSize;
@@ -140,6 +145,8 @@ Future<ParsedMetadata> readWmaMetadata(String filePath) async {
         album: album,
         genre: genre,
         trackNumber: trackNumber,
+        albumArtist: albumArtist,
+        year: year,
       );
     } finally {
       await raf.close();

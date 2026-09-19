@@ -16,6 +16,15 @@ class ParsedMetadata {
   final String? lyrics;
   final String? genre;
 
+  /// The album-level artist ("Various Artists" on a compilation, the
+  /// headline act on a record with guest features) — distinct from
+  /// [artist], which is per-track. Null when the file has no such tag; see
+  /// album_grouping.dart for how grouping falls back to [artist] then.
+  final String? albumArtist;
+
+  /// Release year (parsed from the tag's date field), null if unknown.
+  final int? year;
+
   /// The track's position within its album (e.g. 5 from "5/12") — null when
   /// the format/file has no such tag, not 0. See Tracks.trackNumber in
   /// library_model.dart for why 0 is never used as an "unknown" sentinel.
@@ -30,6 +39,8 @@ class ParsedMetadata {
     this.lyrics,
     this.genre,
     this.trackNumber,
+    this.albumArtist,
+    this.year,
   });
 
   static const empty = ParsedMetadata();

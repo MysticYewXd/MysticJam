@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../audio/format_support.dart';
+import 'album_grouping.dart';
 import 'database.dart';
 import 'library_repository.dart';
 import 'metadata/metadata_reader.dart';
@@ -96,6 +97,18 @@ class LibraryScanner {
       final metadata = await readTrackMetadata(path);
       final title = metadata.title ?? p.basenameWithoutExtension(path);
 
+      // Album membership comes from the tags alone (see albumKeyFor) — never
+      // the folder — and falls back to the Unknown Album bucket when the
+      // tags are missing/unreadable, so every indexed track has an album.
+      final albumId = await repository.findOrCreateAlbum(
+        albumKeyFor(
+          album: metadata.album,
+          albumArtist: metadata.albumArtist,
+          artist: metadata.artist,
+        ),
+        year: metadata.year,
+      );
+
       final id = await repository.upsertTrack(
         TracksCompanion.insert(
           filePath: path,
@@ -114,6 +127,9 @@ class LibraryScanner {
           lyrics: metadata.lyrics != null
               ? Value(metadata.lyrics)
               : const Value.absent(),
+          albumId: Value(albumId),
+          albumArtist: Value(metadata.albumArtist),
+          year: Value(metadata.year),
           genre: metadata.genre != null
               ? Value(metadata.genre)
               : const Value.absent(),
@@ -131,6 +147,7 @@ class LibraryScanner {
         final artPath = await _saveArtwork(id, artwork);
         if (artPath != null) {
           await repository.setAlbumArtPath(id, artPath);
+          await repository.setAlbumCoverIfMissing(albumId, artPath);
         }
       }
 

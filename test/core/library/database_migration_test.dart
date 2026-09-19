@@ -115,6 +115,10 @@ void main() {
         reason: 'new column defaults to null on pre-existing rows',
       );
       expect(tracks.first.trackNumber, isNull);
+      expect(tracks.first.albumId, isNull);
+      expect(tracks.first.albumArtist, isNull);
+      expect(tracks.first.year, isNull);
+      expect(await db.select(db.albums).get(), isEmpty);
 
       final playlists = await db.select(db.playlists).get();
       expect(
@@ -143,6 +147,156 @@ void main() {
     expect(updated.genre, 'Rock');
     expect(updated.trackNumber, 3);
   });
+
+  /// Same idea as [seedV4Database], for a v5 install: tracks already have
+  /// genre/track_number (added in the v4->v5 step) but no album columns and
+  /// no albums table yet.
+  void seedV5Database(String path) {
+    final db = sqlite3.sqlite3.open(path);
+    try {
+      db.execute('''
+        CREATE TABLE tracks (
+          id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          file_path TEXT NOT NULL UNIQUE,
+          title TEXT NOT NULL,
+          artist TEXT NULL,
+          album TEXT NULL,
+          duration_ms INTEGER NULL,
+          format TEXT NOT NULL,
+          date_added INTEGER NOT NULL,
+          album_art_path TEXT NULL,
+          lyrics TEXT NULL,
+          genre TEXT NULL,
+          track_number INTEGER NULL
+        );
+      ''');
+      db.execute('''
+        CREATE TABLE playlists (
+          id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          date_created INTEGER NOT NULL
+        );
+      ''');
+      db.execute('''
+        CREATE TABLE playlist_tracks (
+          id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          playlist_id INTEGER NOT NULL REFERENCES playlists (id),
+          track_id INTEGER NOT NULL REFERENCES tracks (id),
+          position INTEGER NOT NULL
+        );
+      ''');
+      db.execute(
+        'INSERT INTO tracks (file_path, title, artist, album, format, date_added, genre, track_number, album_art_path) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);',
+        [
+          '/music/kept.flac',
+          'Kept Song',
+          'Kept Artist',
+          'Kept Album',
+          'flac',
+          DateTime(2025, 6, 1).millisecondsSinceEpoch,
+          'Jazz',
+          4,
+          '/cache/1.art',
+        ],
+      );
+      db.execute('INSERT INTO playlists (name, date_created) VALUES (?, ?);', [
+        'Mine',
+        DateTime(2025, 6, 1).millisecondsSinceEpoch,
+      ]);
+      db.execute(
+        'INSERT INTO playlist_tracks (playlist_id, track_id, position) VALUES (1, 1, 0);',
+      );
+      db.execute('PRAGMA user_version = 5;');
+    } finally {
+      db.close();
+    }
+  }
+
+  test(
+    'migrating from v5 to v6 adds albums and keeps every existing value',
+    () async {
+      final dbPath = p.join(tempDir.path, 'migration_v5.sqlite');
+      seedV5Database(dbPath);
+
+      final db = AppDatabase.forTesting(NativeDatabase(File(dbPath)));
+      addTearDown(db.close);
+
+      final track = await db.select(db.tracks).getSingle();
+      expect(track.title, 'Kept Song');
+      expect(track.artist, 'Kept Artist');
+      expect(
+        track.album,
+        'Kept Album',
+        reason: 'the raw album tag text must survive',
+      );
+      expect(
+        track.genre,
+        'Jazz',
+        reason: 'columns from the previous migration survive too',
+      );
+      expect(track.trackNumber, 4);
+      expect(track.albumArtPath, '/cache/1.art');
+      expect(track.albumId, isNull, reason: 'not grouped until re-scanned');
+      expect(track.albumArtist, isNull);
+      expect(track.year, isNull);
+
+      expect(await db.select(db.albums).get(), isEmpty);
+      expect((await db.select(db.playlists).get()).length, 1);
+      expect((await db.select(db.playlistTracks).get()).length, 1);
+    },
+  );
+
+  test(
+    'after migrating to v6 an album can be created and a track linked to it',
+    () async {
+      final dbPath = p.join(tempDir.path, 'migration_v5_link.sqlite');
+      seedV5Database(dbPath);
+      final db = AppDatabase.forTesting(NativeDatabase(File(dbPath)));
+      addTearDown(db.close);
+
+      final albumId = await db
+          .into(db.albums)
+          .insert(
+            AlbumsCompanion.insert(
+              groupKey: 'kept album\u001fkept artist',
+              title: 'Kept Album',
+              artist: const Value('Kept Artist'),
+            ),
+          );
+      await (db.update(db.tracks)..where((t) => t.id.equals(1))).write(
+        TracksCompanion(
+          albumId: Value(albumId),
+          albumArtist: const Value('Kept Artist'),
+          year: const Value(2020),
+        ),
+      );
+
+      final joined = await (db.select(
+        db.tracks,
+      )..where((t) => t.albumId.equals(albumId))).getSingle();
+      expect(joined.year, 2020);
+      expect(joined.albumArtist, 'Kept Artist');
+    },
+  );
+
+  test(
+    'albums.groupKey is unique so the same album cannot be created twice',
+    () async {
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(db.close);
+      await db
+          .into(db.albums)
+          .insert(AlbumsCompanion.insert(groupKey: 'k', title: 'A'));
+
+      expect(
+        () => db
+            .into(db.albums)
+            .insert(AlbumsCompanion.insert(groupKey: 'k', title: 'B')),
+        throwsA(anything),
+      );
+    },
+  );
 
   test(
     'a fresh (onCreate) database already has the v5 columns available',

@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 
+import 'album_grouping.dart';
 import 'database.dart';
 
 /// Thin query layer over [AppDatabase] — the rest of the app talks to the
@@ -77,6 +78,43 @@ class LibraryRepository {
     return track.id;
   }
 
+  /// Returns the id of the album for [key], creating it on first sight.
+  /// Race-safe against the unique groupKey (insert-or-ignore, then read
+  /// back) so concurrent/repeated scans can never produce duplicate albums.
+  /// [year] only ever fills in a missing year — it never overwrites one
+  /// already set — and is ignored for the Unknown Album bucket, where a
+  /// single "year" would be meaningless across unrelated files.
+  Future<int> findOrCreateAlbum(AlbumKey key, {int? year}) async {
+    await db
+        .into(db.albums)
+        .insert(
+          AlbumsCompanion.insert(
+            groupKey: key.groupKey,
+            title: key.title,
+            artist: Value(key.artist),
+            year: Value(key.isUnknown ? null : year),
+          ),
+          mode: InsertMode.insertOrIgnore,
+        );
+    final album = await (db.select(
+      db.albums,
+    )..where((a) => a.groupKey.equals(key.groupKey))).getSingle();
+    if (album.year == null && year != null && !key.isUnknown) {
+      await (db.update(db.albums)..where((a) => a.id.equals(album.id))).write(
+        AlbumsCompanion(year: Value(year)),
+      );
+    }
+    return album.id;
+  }
+
+  /// Gives the album a cover if it doesn't have one yet — first track with
+  /// art wins, later tracks never replace it.
+  Future<void> setAlbumCoverIfMissing(int albumId, String coverArtPath) {
+    return (db.update(db.albums)
+          ..where((a) => a.id.equals(albumId) & a.coverArtPath.isNull()))
+        .write(AlbumsCompanion(coverArtPath: Value(coverArtPath)));
+  }
+
   Future<void> setAlbumArtPath(int id, String path) {
     return (db.update(db.tracks)..where((t) => t.id.equals(id))).write(
       TracksCompanion(albumArtPath: Value(path)),
@@ -141,6 +179,13 @@ class LibraryRepository {
         lyrics: track.lyrics != null
             ? Value(track.lyrics)
             : const Value.absent(),
+        albumId: track.albumId != null
+            ? Value(track.albumId)
+            : const Value.absent(),
+        albumArtist: track.albumArtist != null
+            ? Value(track.albumArtist)
+            : const Value.absent(),
+        year: track.year != null ? Value(track.year) : const Value.absent(),
         genre: track.genre != null ? Value(track.genre) : const Value.absent(),
         trackNumber: track.trackNumber != null
             ? Value(track.trackNumber)

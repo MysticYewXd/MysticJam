@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'track_metadata.dart';
 import 'track_number_parser.dart';
+import 'year_parser.dart';
 
 const _apeTagPreamble = 'APETAGEX';
 const _apeFooterSize = 32;
@@ -51,6 +52,8 @@ Future<ParsedMetadata> readApeMetadata(String filePath) async {
         album: _nonEmpty(tags['ALBUM']),
         genre: _nonEmpty(tags['GENRE']),
         trackNumber: parseLeadingTrackNumber(tags['TRACK']),
+        albumArtist: _nonEmpty(tags['ALBUM ARTIST'] ?? tags['ALBUMARTIST']),
+        year: parseLeadingYear(tags['YEAR']),
       );
     } finally {
       await raf.close();
