@@ -577,6 +577,17 @@ class $TracksTable extends Tracks with TableInfo<$TracksTable, Track> {
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _syncedLyricsMeta = const VerificationMeta(
+    'syncedLyrics',
+  );
+  @override
+  late final GeneratedColumn<String> syncedLyrics = GeneratedColumn<String>(
+    'synced_lyrics',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -594,6 +605,7 @@ class $TracksTable extends Tracks with TableInfo<$TracksTable, Track> {
     albumId,
     albumArtist,
     year,
+    syncedLyrics,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -709,6 +721,15 @@ class $TracksTable extends Tracks with TableInfo<$TracksTable, Track> {
         year.isAcceptableOrUnknown(data['year']!, _yearMeta),
       );
     }
+    if (data.containsKey('synced_lyrics')) {
+      context.handle(
+        _syncedLyricsMeta,
+        syncedLyrics.isAcceptableOrUnknown(
+          data['synced_lyrics']!,
+          _syncedLyricsMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -778,6 +799,10 @@ class $TracksTable extends Tracks with TableInfo<$TracksTable, Track> {
         DriftSqlType.int,
         data['${effectivePrefix}year'],
       ),
+      syncedLyrics: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}synced_lyrics'],
+      ),
     );
   }
 
@@ -833,6 +858,14 @@ class Track extends DataClass implements Insertable<Track> {
 
   /// Release year from the tags, null if unknown.
   final int? year;
+
+  /// Raw contents of a same-named `.lrc` sidecar file found next to the
+  /// track at scan time (e.g. `song.mp3` + `song.lrc`), if one exists.
+  /// Stored raw rather than pre-parsed so a future LRC format tweak only
+  /// needs a new parser, not a re-scan — see metadata/lrc_parser.dart for
+  /// how it's read. Separate from [lyrics] (ID3 USLT), which is unsynced
+  /// and comes from the audio file itself, not a sidecar.
+  final String? syncedLyrics;
   const Track({
     required this.id,
     required this.filePath,
@@ -849,6 +882,7 @@ class Track extends DataClass implements Insertable<Track> {
     this.albumId,
     this.albumArtist,
     this.year,
+    this.syncedLyrics,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -888,6 +922,9 @@ class Track extends DataClass implements Insertable<Track> {
     if (!nullToAbsent || year != null) {
       map['year'] = Variable<int>(year);
     }
+    if (!nullToAbsent || syncedLyrics != null) {
+      map['synced_lyrics'] = Variable<String>(syncedLyrics);
+    }
     return map;
   }
 
@@ -926,6 +963,9 @@ class Track extends DataClass implements Insertable<Track> {
           ? const Value.absent()
           : Value(albumArtist),
       year: year == null && nullToAbsent ? const Value.absent() : Value(year),
+      syncedLyrics: syncedLyrics == null && nullToAbsent
+          ? const Value.absent()
+          : Value(syncedLyrics),
     );
   }
 
@@ -950,6 +990,7 @@ class Track extends DataClass implements Insertable<Track> {
       albumId: serializer.fromJson<int?>(json['albumId']),
       albumArtist: serializer.fromJson<String?>(json['albumArtist']),
       year: serializer.fromJson<int?>(json['year']),
+      syncedLyrics: serializer.fromJson<String?>(json['syncedLyrics']),
     );
   }
   @override
@@ -971,6 +1012,7 @@ class Track extends DataClass implements Insertable<Track> {
       'albumId': serializer.toJson<int?>(albumId),
       'albumArtist': serializer.toJson<String?>(albumArtist),
       'year': serializer.toJson<int?>(year),
+      'syncedLyrics': serializer.toJson<String?>(syncedLyrics),
     };
   }
 
@@ -990,6 +1032,7 @@ class Track extends DataClass implements Insertable<Track> {
     Value<int?> albumId = const Value.absent(),
     Value<String?> albumArtist = const Value.absent(),
     Value<int?> year = const Value.absent(),
+    Value<String?> syncedLyrics = const Value.absent(),
   }) => Track(
     id: id ?? this.id,
     filePath: filePath ?? this.filePath,
@@ -1006,6 +1049,7 @@ class Track extends DataClass implements Insertable<Track> {
     albumId: albumId.present ? albumId.value : this.albumId,
     albumArtist: albumArtist.present ? albumArtist.value : this.albumArtist,
     year: year.present ? year.value : this.year,
+    syncedLyrics: syncedLyrics.present ? syncedLyrics.value : this.syncedLyrics,
   );
   Track copyWithCompanion(TracksCompanion data) {
     return Track(
@@ -1032,6 +1076,9 @@ class Track extends DataClass implements Insertable<Track> {
           ? data.albumArtist.value
           : this.albumArtist,
       year: data.year.present ? data.year.value : this.year,
+      syncedLyrics: data.syncedLyrics.present
+          ? data.syncedLyrics.value
+          : this.syncedLyrics,
     );
   }
 
@@ -1052,7 +1099,8 @@ class Track extends DataClass implements Insertable<Track> {
           ..write('trackNumber: $trackNumber, ')
           ..write('albumId: $albumId, ')
           ..write('albumArtist: $albumArtist, ')
-          ..write('year: $year')
+          ..write('year: $year, ')
+          ..write('syncedLyrics: $syncedLyrics')
           ..write(')'))
         .toString();
   }
@@ -1074,6 +1122,7 @@ class Track extends DataClass implements Insertable<Track> {
     albumId,
     albumArtist,
     year,
+    syncedLyrics,
   );
   @override
   bool operator ==(Object other) =>
@@ -1093,7 +1142,8 @@ class Track extends DataClass implements Insertable<Track> {
           other.trackNumber == this.trackNumber &&
           other.albumId == this.albumId &&
           other.albumArtist == this.albumArtist &&
-          other.year == this.year);
+          other.year == this.year &&
+          other.syncedLyrics == this.syncedLyrics);
 }
 
 class TracksCompanion extends UpdateCompanion<Track> {
@@ -1112,6 +1162,7 @@ class TracksCompanion extends UpdateCompanion<Track> {
   final Value<int?> albumId;
   final Value<String?> albumArtist;
   final Value<int?> year;
+  final Value<String?> syncedLyrics;
   const TracksCompanion({
     this.id = const Value.absent(),
     this.filePath = const Value.absent(),
@@ -1128,6 +1179,7 @@ class TracksCompanion extends UpdateCompanion<Track> {
     this.albumId = const Value.absent(),
     this.albumArtist = const Value.absent(),
     this.year = const Value.absent(),
+    this.syncedLyrics = const Value.absent(),
   });
   TracksCompanion.insert({
     this.id = const Value.absent(),
@@ -1145,6 +1197,7 @@ class TracksCompanion extends UpdateCompanion<Track> {
     this.albumId = const Value.absent(),
     this.albumArtist = const Value.absent(),
     this.year = const Value.absent(),
+    this.syncedLyrics = const Value.absent(),
   }) : filePath = Value(filePath),
        title = Value(title),
        format = Value(format);
@@ -1164,6 +1217,7 @@ class TracksCompanion extends UpdateCompanion<Track> {
     Expression<int>? albumId,
     Expression<String>? albumArtist,
     Expression<int>? year,
+    Expression<String>? syncedLyrics,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1181,6 +1235,7 @@ class TracksCompanion extends UpdateCompanion<Track> {
       if (albumId != null) 'album_id': albumId,
       if (albumArtist != null) 'album_artist': albumArtist,
       if (year != null) 'year': year,
+      if (syncedLyrics != null) 'synced_lyrics': syncedLyrics,
     });
   }
 
@@ -1200,6 +1255,7 @@ class TracksCompanion extends UpdateCompanion<Track> {
     Value<int?>? albumId,
     Value<String?>? albumArtist,
     Value<int?>? year,
+    Value<String?>? syncedLyrics,
   }) {
     return TracksCompanion(
       id: id ?? this.id,
@@ -1217,6 +1273,7 @@ class TracksCompanion extends UpdateCompanion<Track> {
       albumId: albumId ?? this.albumId,
       albumArtist: albumArtist ?? this.albumArtist,
       year: year ?? this.year,
+      syncedLyrics: syncedLyrics ?? this.syncedLyrics,
     );
   }
 
@@ -1268,6 +1325,9 @@ class TracksCompanion extends UpdateCompanion<Track> {
     if (year.present) {
       map['year'] = Variable<int>(year.value);
     }
+    if (syncedLyrics.present) {
+      map['synced_lyrics'] = Variable<String>(syncedLyrics.value);
+    }
     return map;
   }
 
@@ -1288,7 +1348,8 @@ class TracksCompanion extends UpdateCompanion<Track> {
           ..write('trackNumber: $trackNumber, ')
           ..write('albumId: $albumId, ')
           ..write('albumArtist: $albumArtist, ')
-          ..write('year: $year')
+          ..write('year: $year, ')
+          ..write('syncedLyrics: $syncedLyrics')
           ..write(')'))
         .toString();
   }
@@ -2197,6 +2258,7 @@ typedef $$TracksTableCreateCompanionBuilder =
       Value<int?> albumId,
       Value<String?> albumArtist,
       Value<int?> year,
+      Value<String?> syncedLyrics,
     });
 typedef $$TracksTableUpdateCompanionBuilder =
     TracksCompanion Function({
@@ -2215,6 +2277,7 @@ typedef $$TracksTableUpdateCompanionBuilder =
       Value<int?> albumId,
       Value<String?> albumArtist,
       Value<int?> year,
+      Value<String?> syncedLyrics,
     });
 
 final class $$TracksTableReferences
@@ -2333,6 +2396,11 @@ class $$TracksTableFilterComposer
 
   ColumnFilters<int> get year => $composableBuilder(
     column: $table.year,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get syncedLyrics => $composableBuilder(
+    column: $table.syncedLyrics,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2464,6 +2532,11 @@ class $$TracksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get syncedLyrics => $composableBuilder(
+    column: $table.syncedLyrics,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$AlbumsTableOrderingComposer get albumId {
     final $$AlbumsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -2546,6 +2619,11 @@ class $$TracksTableAnnotationComposer
 
   GeneratedColumn<int> get year =>
       $composableBuilder(column: $table.year, builder: (column) => column);
+
+  GeneratedColumn<String> get syncedLyrics => $composableBuilder(
+    column: $table.syncedLyrics,
+    builder: (column) => column,
+  );
 
   $$AlbumsTableAnnotationComposer get albumId {
     final $$AlbumsTableAnnotationComposer composer = $composerBuilder(
@@ -2639,6 +2717,7 @@ class $$TracksTableTableManager
                 Value<int?> albumId = const Value.absent(),
                 Value<String?> albumArtist = const Value.absent(),
                 Value<int?> year = const Value.absent(),
+                Value<String?> syncedLyrics = const Value.absent(),
               }) => TracksCompanion(
                 id: id,
                 filePath: filePath,
@@ -2655,6 +2734,7 @@ class $$TracksTableTableManager
                 albumId: albumId,
                 albumArtist: albumArtist,
                 year: year,
+                syncedLyrics: syncedLyrics,
               ),
           createCompanionCallback:
               ({
@@ -2673,6 +2753,7 @@ class $$TracksTableTableManager
                 Value<int?> albumId = const Value.absent(),
                 Value<String?> albumArtist = const Value.absent(),
                 Value<int?> year = const Value.absent(),
+                Value<String?> syncedLyrics = const Value.absent(),
               }) => TracksCompanion.insert(
                 id: id,
                 filePath: filePath,
@@ -2689,6 +2770,7 @@ class $$TracksTableTableManager
                 albumId: albumId,
                 albumArtist: albumArtist,
                 year: year,
+                syncedLyrics: syncedLyrics,
               ),
           withReferenceMapper: (p0) => p0
               .map(

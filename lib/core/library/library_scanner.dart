@@ -96,6 +96,7 @@ class LibraryScanner {
       final ext = p.extension(path).replaceFirst('.', '').toLowerCase();
       final metadata = await readTrackMetadata(path);
       final title = metadata.title ?? p.basenameWithoutExtension(path);
+      final syncedLyrics = await _findLrcSidecar(path);
 
       // Album membership comes from the tags alone (see albumKeyFor) — never
       // the folder — and falls back to the Unknown Album bucket when the
@@ -136,6 +137,9 @@ class LibraryScanner {
           trackNumber: metadata.trackNumber != null
               ? Value(metadata.trackNumber)
               : const Value.absent(),
+          syncedLyrics: syncedLyrics != null
+              ? Value(syncedLyrics)
+              : const Value.absent(),
         ),
       );
 
@@ -155,6 +159,57 @@ class LibraryScanner {
     } catch (_) {
       return _IndexOutcome.failed;
     }
+  }
+
+  /// Re-reads only the lyrics of every indexed track: embedded lyrics tags
+  /// and the `.lrc` sidecar next to each file. Existing lyrics are only ever
+  /// replaced, never cleared — the synced column also holds lyrics fetched
+  /// online, which a rescan must not throw away just because no `.lrc` file
+  /// exists. Reads first (reporting progress), then writes everything in one
+  /// transaction, since unbatched per-file writes are ~140x slower (see
+  /// [_batchSize]). Returns how many tracks now have a lyrics update.
+  Future<int> rescanLyrics({
+    void Function(int done, int total)? onProgress,
+  }) async {
+    final paths = await repository.getAllFilePaths();
+    final found = <String, ({String? plain, String? synced})>{};
+    for (var i = 0; i < paths.length; i++) {
+      final path = paths[i];
+      if (await File(path).exists()) {
+        final synced = await _findLrcSidecar(path);
+        final plain = (await readTrackMetadata(path)).lyrics;
+        if (synced != null || plain != null) {
+          found[path] = (plain: plain, synced: synced);
+        }
+      }
+      onProgress?.call(i + 1, paths.length);
+    }
+    await repository.setLyricsForPaths(found);
+    return found.length;
+  }
+
+  /// Reads `<same name>.lrc` next to [audioFilePath], if it exists — a
+  /// straight sibling-file check, not a directory listing, since (unlike
+  /// cover art) an LRC file's own name always matches the track it's for.
+  /// Case-insensitive extension, since rippers/taggers disagree on `.lrc`
+  /// vs `.LRC`. Returns the raw file content for [parseLrc] to read later,
+  /// not pre-parsed — see Tracks.syncedLyrics.
+  Future<String?> _findLrcSidecar(String audioFilePath) async {
+    final base = p.withoutExtension(audioFilePath);
+    for (final candidate in ['$base.lrc', '$base.LRC']) {
+      try {
+        final file = File(candidate);
+        if (await file.exists()) {
+          final content = await file.readAsString();
+          if (content.trim().isNotEmpty) return content;
+          return null;
+        }
+      } catch (_) {
+        // Unreadable sidecar (permissions, bad encoding) — not fatal, the
+        // track still gets indexed without synced lyrics.
+      }
+    }
+    return null;
   }
 
   Future<Uint8List?> _findExternalArtwork(String audioFilePath) async {

@@ -7,6 +7,7 @@ import '../../core/theme/theme_provider.dart';
 import '../../widgets/confirm_dialog.dart';
 import '../../widgets/themed/themed_icon.dart';
 import '../theme_editor/theme_editor_screen.dart';
+import 'look_and_feel_screen.dart';
 
 const _lightPresetId = 'preset-light';
 
@@ -131,6 +132,20 @@ class SettingsScreen extends ConsumerWidget {
             ),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const ThemeEditorScreen()),
+            ),
+          ),
+          ListTile(
+            leading: Icon(Icons.tune, color: theme.colors.textSecondary),
+            title: Text(
+              'Look & Feel',
+              style: TextStyle(color: theme.colors.textPrimary),
+            ),
+            subtitle: Text(
+              'Lyrics, lists, player colours and display options.',
+              style: TextStyle(color: theme.colors.textSecondary),
+            ),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const LookAndFeelScreen()),
             ),
           ),
           const Divider(),

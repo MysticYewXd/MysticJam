@@ -298,6 +298,123 @@ void main() {
     },
   );
 
+  /// Same idea again, for a v6 install: albums exist and tracks are already
+  /// grouped, but there's no synced-lyrics column yet.
+  void seedV6Database(String path) {
+    final db = sqlite3.sqlite3.open(path);
+    try {
+      db.execute('''
+        CREATE TABLE albums (
+          id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          group_key TEXT NOT NULL UNIQUE,
+          title TEXT NOT NULL,
+          artist TEXT NULL,
+          year INTEGER NULL,
+          cover_art_path TEXT NULL
+        );
+      ''');
+      db.execute('''
+        CREATE TABLE tracks (
+          id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          file_path TEXT NOT NULL UNIQUE,
+          title TEXT NOT NULL,
+          artist TEXT NULL,
+          album TEXT NULL,
+          duration_ms INTEGER NULL,
+          format TEXT NOT NULL,
+          date_added INTEGER NOT NULL,
+          album_art_path TEXT NULL,
+          lyrics TEXT NULL,
+          genre TEXT NULL,
+          track_number INTEGER NULL,
+          album_id INTEGER NULL REFERENCES albums (id),
+          album_artist TEXT NULL,
+          year INTEGER NULL
+        );
+      ''');
+      db.execute('''
+        CREATE TABLE playlists (
+          id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          date_created INTEGER NOT NULL
+        );
+      ''');
+      db.execute('''
+        CREATE TABLE playlist_tracks (
+          id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          playlist_id INTEGER NOT NULL REFERENCES playlists (id),
+          track_id INTEGER NOT NULL REFERENCES tracks (id),
+          position INTEGER NOT NULL
+        );
+      ''');
+      db.execute(
+        'INSERT INTO albums (group_key, title, artist, year) VALUES (?, ?, ?, ?);',
+        ['kept album\u001fkept artist', 'Kept Album', 'Kept Artist', 2020],
+      );
+      db.execute(
+        'INSERT INTO tracks (file_path, title, artist, album, format, date_added, album_id, album_artist, year) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);',
+        [
+          '/music/kept.flac',
+          'Kept Song',
+          'Kept Artist',
+          'Kept Album',
+          'flac',
+          DateTime(2025, 6, 1).millisecondsSinceEpoch,
+          1,
+          'Kept Artist',
+          2020,
+        ],
+      );
+      db.execute('PRAGMA user_version = 6;');
+    } finally {
+      db.close();
+    }
+  }
+
+  test(
+    'migrating from v6 to v7 adds synced lyrics and keeps grouping intact',
+    () async {
+      final dbPath = p.join(tempDir.path, 'migration_v6.sqlite');
+      seedV6Database(dbPath);
+
+      final db = AppDatabase.forTesting(NativeDatabase(File(dbPath)));
+      addTearDown(db.close);
+
+      final track = await db.select(db.tracks).getSingle();
+      expect(track.title, 'Kept Song');
+      expect(track.albumArtist, 'Kept Artist');
+      expect(track.year, 2020);
+      expect(
+        track.syncedLyrics,
+        isNull,
+        reason: 'new column defaults to null on pre-existing rows',
+      );
+
+      final album = await db.select(db.albums).getSingle();
+      expect(album.title, 'Kept Album');
+      expect(track.albumId, album.id);
+    },
+  );
+
+  test(
+    'synced lyrics are writable and queryable after migrating to v7',
+    () async {
+      final dbPath = p.join(tempDir.path, 'migration_v6_lyrics.sqlite');
+      seedV6Database(dbPath);
+      final db = AppDatabase.forTesting(NativeDatabase(File(dbPath)));
+      addTearDown(db.close);
+
+      final track = await db.select(db.tracks).getSingle();
+      await (db.update(db.tracks)..where((t) => t.id.equals(track.id))).write(
+        const TracksCompanion(syncedLyrics: Value('[00:01.00]Hello')),
+      );
+
+      final updated = await db.select(db.tracks).getSingle();
+      expect(updated.syncedLyrics, '[00:01.00]Hello');
+    },
+  );
+
   test(
     'a fresh (onCreate) database already has the v5 columns available',
     () async {

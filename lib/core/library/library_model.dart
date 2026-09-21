@@ -73,6 +73,14 @@ class Tracks extends Table {
 
   /// Release year from the tags, null if unknown.
   IntColumn get year => integer().nullable()();
+
+  /// Raw contents of a same-named `.lrc` sidecar file found next to the
+  /// track at scan time (e.g. `song.mp3` + `song.lrc`), if one exists.
+  /// Stored raw rather than pre-parsed so a future LRC format tweak only
+  /// needs a new parser, not a re-scan — see metadata/lrc_parser.dart for
+  /// how it's read. Separate from [lyrics] (ID3 USLT), which is unsynced
+  /// and comes from the audio file itself, not a sidecar.
+  TextColumn get syncedLyrics => text().nullable()();
 }
 
 /// A user-created, named ordered collection of tracks. Playback queues are

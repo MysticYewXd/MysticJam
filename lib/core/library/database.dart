@@ -16,7 +16,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -48,6 +48,12 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(tracks, tracks.albumId);
         await m.addColumn(tracks, tracks.albumArtist);
         await m.addColumn(tracks, tracks.year);
+      }
+      if (from < 7) {
+        // NULL on every existing row until the next scan/"Refresh Metadata"
+        // looks for each track's .lrc sidecar — matches how every other
+        // scan-derived column has been backfilled by past migrations.
+        await m.addColumn(tracks, tracks.syncedLyrics);
       }
     },
   );

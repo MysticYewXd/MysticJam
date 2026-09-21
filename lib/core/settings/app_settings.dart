@@ -10,6 +10,125 @@ import 'package:path_provider/path_provider.dart';
 /// enough for a meaningful list without the file growing unbounded.
 const _recentlyPlayedLimit = 50;
 
+enum LyricsAlign { left, center, right }
+
+/// Look-and-feel preferences (Settings → Look & Feel). Kept in the same
+/// settings file as the session state below since it's the same persistence
+/// story; one immutable bundle so adding an option is one field + one line
+/// in each of copyWith/toJson/fromJson.
+class UiPrefs {
+  final double lyricsFontSize;
+  final LyricsAlign lyricsAlign;
+  final double lyricsLineSpacing;
+
+  /// Opacity of every lyric line except the current one.
+  final double lyricsInactiveOpacity;
+  final bool lyricsAutoScroll;
+  final bool lyricsTapToSeek;
+
+  /// Whether opening Lyrics may look a track up on lrclib.net when it has no
+  /// local synced lyrics (the only thing in the app that uses the network).
+  final bool lyricsOnlineLookup;
+  final bool showLyricsIcon;
+  final bool showFormatTag;
+
+  /// Tint the mini player / Now Playing with the album art's colours.
+  final bool albumColors;
+  final bool showFps;
+
+  const UiPrefs({
+    this.lyricsFontSize = 20,
+    this.lyricsAlign = LyricsAlign.left,
+    this.lyricsLineSpacing = 1.4,
+    this.lyricsInactiveOpacity = 0.35,
+    this.lyricsAutoScroll = true,
+    this.lyricsTapToSeek = true,
+    this.lyricsOnlineLookup = true,
+    this.showLyricsIcon = true,
+    this.showFormatTag = true,
+    this.albumColors = true,
+    this.showFps = false,
+  });
+
+  UiPrefs copyWith({
+    double? lyricsFontSize,
+    LyricsAlign? lyricsAlign,
+    double? lyricsLineSpacing,
+    double? lyricsInactiveOpacity,
+    bool? lyricsAutoScroll,
+    bool? lyricsTapToSeek,
+    bool? lyricsOnlineLookup,
+    bool? showLyricsIcon,
+    bool? showFormatTag,
+    bool? albumColors,
+    bool? showFps,
+  }) => UiPrefs(
+    lyricsFontSize: lyricsFontSize ?? this.lyricsFontSize,
+    lyricsAlign: lyricsAlign ?? this.lyricsAlign,
+    lyricsLineSpacing: lyricsLineSpacing ?? this.lyricsLineSpacing,
+    lyricsInactiveOpacity: lyricsInactiveOpacity ?? this.lyricsInactiveOpacity,
+    lyricsAutoScroll: lyricsAutoScroll ?? this.lyricsAutoScroll,
+    lyricsTapToSeek: lyricsTapToSeek ?? this.lyricsTapToSeek,
+    lyricsOnlineLookup: lyricsOnlineLookup ?? this.lyricsOnlineLookup,
+    showLyricsIcon: showLyricsIcon ?? this.showLyricsIcon,
+    showFormatTag: showFormatTag ?? this.showFormatTag,
+    albumColors: albumColors ?? this.albumColors,
+    showFps: showFps ?? this.showFps,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'lyricsFontSize': lyricsFontSize,
+    'lyricsAlign': lyricsAlign.name,
+    'lyricsLineSpacing': lyricsLineSpacing,
+    'lyricsInactiveOpacity': lyricsInactiveOpacity,
+    'lyricsAutoScroll': lyricsAutoScroll,
+    'lyricsTapToSeek': lyricsTapToSeek,
+    'lyricsOnlineLookup': lyricsOnlineLookup,
+    'showLyricsIcon': showLyricsIcon,
+    'showFormatTag': showFormatTag,
+    'albumColors': albumColors,
+    'showFps': showFps,
+  };
+
+  factory UiPrefs.fromJson(Map<String, dynamic> j) {
+    const d = UiPrefs();
+    double num_(String k, double fallback, double lo, double hi) {
+      final v = j[k];
+      return (v is num ? v.toDouble() : fallback).clamp(lo, hi);
+    }
+
+    bool flag(String k, bool fallback) {
+      final v = j[k];
+      return v is bool ? v : fallback;
+    }
+
+    return UiPrefs(
+      lyricsFontSize: num_('lyricsFontSize', d.lyricsFontSize, 12, 40),
+      lyricsAlign:
+          LyricsAlign.values.asNameMap()[j['lyricsAlign']] ?? d.lyricsAlign,
+      lyricsLineSpacing: num_(
+        'lyricsLineSpacing',
+        d.lyricsLineSpacing,
+        1.0,
+        2.5,
+      ),
+      lyricsInactiveOpacity: num_(
+        'lyricsInactiveOpacity',
+        d.lyricsInactiveOpacity,
+        0.1,
+        1.0,
+      ),
+      lyricsAutoScroll: flag('lyricsAutoScroll', d.lyricsAutoScroll),
+      lyricsTapToSeek: flag('lyricsTapToSeek', d.lyricsTapToSeek),
+      lyricsOnlineLookup: flag('lyricsOnlineLookup', d.lyricsOnlineLookup),
+      showLyricsIcon: flag('showLyricsIcon', d.showLyricsIcon),
+      showFormatTag: flag('showFormatTag', d.showFormatTag),
+      albumColors: flag('albumColors', d.albumColors),
+      showFps: flag('showFps', d.showFps),
+    );
+  }
+}
+
 /// Playback/session state and imported-folder history that survives an app
 /// restart. Deliberately holds only primitives (no Track, no
 /// PlayerRepeatMode) so this file has zero dependency on the playback or
@@ -37,6 +156,8 @@ class AppSettingsState {
   /// for when that's built.
   final List<String> importedFolders;
 
+  final UiPrefs ui;
+
   const AppSettingsState({
     this.shuffleEnabled = false,
     this.repeatMode = 'off',
@@ -44,6 +165,7 @@ class AppSettingsState {
     this.lastPositionMs = 0,
     this.recentlyPlayedTrackIds = const [],
     this.importedFolders = const [],
+    this.ui = const UiPrefs(),
   });
 
   AppSettingsState copyWith({
@@ -53,6 +175,7 @@ class AppSettingsState {
     int? lastPositionMs,
     List<int>? recentlyPlayedTrackIds,
     List<String>? importedFolders,
+    UiPrefs? ui,
   }) {
     return AppSettingsState(
       shuffleEnabled: shuffleEnabled ?? this.shuffleEnabled,
@@ -62,6 +185,7 @@ class AppSettingsState {
       recentlyPlayedTrackIds:
           recentlyPlayedTrackIds ?? this.recentlyPlayedTrackIds,
       importedFolders: importedFolders ?? this.importedFolders,
+      ui: ui ?? this.ui,
     );
   }
 
@@ -72,6 +196,7 @@ class AppSettingsState {
     'lastPositionMs': lastPositionMs,
     'recentlyPlayedTrackIds': recentlyPlayedTrackIds,
     'importedFolders': importedFolders,
+    'ui': ui.toJson(),
   };
 
   factory AppSettingsState.fromJson(Map<String, dynamic> json) {
@@ -84,6 +209,9 @@ class AppSettingsState {
           (json['recentlyPlayedTrackIds'] as List?)?.cast<int>() ?? const [],
       importedFolders:
           (json['importedFolders'] as List?)?.cast<String>() ?? const [],
+      ui: UiPrefs.fromJson(
+        (json['ui'] as Map?)?.cast<String, dynamic>() ?? const {},
+      ),
     );
   }
 }
@@ -210,6 +338,11 @@ class AppSettingsNotifier extends Notifier<AppSettingsState> {
     await _persist();
   }
 
+  Future<void> updateUi(UiPrefs Function(UiPrefs) change) async {
+    state = state.copyWith(ui: change(state.ui));
+    await _persist();
+  }
+
   Future<void> addImportedFolder(String path) async {
     if (state.importedFolders.contains(path)) return;
     state = state.copyWith(importedFolders: [...state.importedFolders, path]);
@@ -225,6 +358,10 @@ class AppSettingsNotifier extends Notifier<AppSettingsState> {
     await _persist();
   }
 }
+
+final uiPrefsProvider = Provider<UiPrefs>(
+  (ref) => ref.watch(appSettingsProvider.select((s) => s.ui)),
+);
 
 final appSettingsProvider =
     NotifierProvider<AppSettingsNotifier, AppSettingsState>(

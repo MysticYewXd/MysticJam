@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../playback/playback_controller.dart';
+import '../settings/app_settings.dart';
 import 'theme_model.dart';
 import 'theme_provider.dart';
 
@@ -224,7 +225,7 @@ final currentAlbumSeedProvider = NotifierProvider<CurrentAlbumSeed, Color?>(
 final albumAdaptedThemeProvider = Provider<AppTheme>((ref) {
   final base = ref.watch(themeProvider);
   final seed = ref.watch(currentAlbumSeedProvider);
-  if (seed == null) return base;
+  if (seed == null || !ref.watch(uiPrefsProvider).albumColors) return base;
   return AppTheme(
     name: base.name,
     author: base.author,

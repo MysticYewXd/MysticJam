@@ -1,4 +1,5 @@
 import 'dart:ui' show Tristate;
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:music_player/core/library/database.dart';
 import 'package:music_player/core/playback/playback_controller.dart';
+import 'package:music_player/core/settings/app_settings.dart';
 import 'package:music_player/widgets/themed/round_buttons.dart';
 import 'package:music_player/widgets/themed/themed_button.dart';
 import 'package:music_player/widgets/themed/themed_icon.dart';
@@ -31,8 +33,13 @@ Track _track(int id, String title) => Track(
   dateAdded: DateTime(2025),
 );
 
-Widget _host(Widget child, {PlaybackState? playback}) => ProviderScope(
+Widget _host(
+  Widget child, {
+  PlaybackState? playback,
+  UiPrefs prefs = const UiPrefs(),
+}) => ProviderScope(
   overrides: [
+    uiPrefsProvider.overrideWithValue(prefs),
     if (playback != null)
       playbackControllerProvider.overrideWith(() => _FakePlayback(playback)),
   ],
@@ -238,6 +245,68 @@ void main() {
       );
       await tester.tap(find.text('One'));
       expect(taps, 1);
+    });
+    testWidgets('shows a lyrics icon only for tracks with lyrics', (
+      tester,
+    ) async {
+      final plain = _track(1, 'Plain');
+      final synced = _track(
+        2,
+        'Synced',
+      ).copyWith(syncedLyrics: const Value('[00:01.00]hi'));
+      final embedded = _track(
+        3,
+        'Embedded',
+      ).copyWith(lyrics: const Value('la la'));
+      await tester.pumpWidget(
+        _host(
+          SizedBox(
+            width: 500,
+            child: Column(
+              children: [
+                for (final t in [plain, synced, embedded])
+                  TrackRow(track: t, onTap: () {}),
+              ],
+            ),
+          ),
+          playback: const PlaybackState(),
+        ),
+      );
+      expect(find.byIcon(Icons.lyrics_outlined), findsNWidgets(2));
+      expect(
+        find.descendant(
+          of: find.byType(TrackRow).first,
+          matching: find.byIcon(Icons.lyrics_outlined),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('lyrics icon and format tag can be switched off in settings', (
+      tester,
+    ) async {
+      final t = _track(
+        2,
+        'Synced',
+      ).copyWith(syncedLyrics: const Value('[00:01.00]hi'));
+      Widget row(UiPrefs prefs) => _host(
+        SizedBox(
+          width: 500,
+          child: TrackRow(track: t, onTap: () {}),
+        ),
+        playback: const PlaybackState(),
+        prefs: prefs,
+      );
+
+      await tester.pumpWidget(row(const UiPrefs()));
+      expect(find.byIcon(Icons.lyrics_outlined), findsOneWidget);
+      expect(find.text('FLAC'), findsOneWidget);
+
+      await tester.pumpWidget(
+        row(const UiPrefs(showLyricsIcon: false, showFormatTag: false)),
+      );
+      expect(find.byIcon(Icons.lyrics_outlined), findsNothing);
+      expect(find.text('FLAC'), findsNothing);
     });
   });
 }

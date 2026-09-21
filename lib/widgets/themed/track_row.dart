@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format_duration.dart';
 import '../../core/library/database.dart';
 import '../../core/playback/playback_controller.dart';
+import '../../core/settings/app_settings.dart';
 import '../../core/theme/theme_provider.dart';
 import 'track_art.dart';
 
@@ -42,6 +43,9 @@ class TrackRow extends ConsumerStatefulWidget {
   ConsumerState<TrackRow> createState() => _TrackRowState();
 }
 
+bool _hasLyrics(Track t) =>
+    t.syncedLyrics != null || (t.lyrics?.trim().isNotEmpty ?? false);
+
 class _TrackRowState extends ConsumerState<TrackRow> {
   bool _hovered = false;
   bool _focused = false;
@@ -49,6 +53,7 @@ class _TrackRowState extends ConsumerState<TrackRow> {
   @override
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
+    final ui = ref.watch(uiPrefsProvider);
     final track = widget.track;
     final isCurrent = ref.watch(
       playbackControllerProvider.select((s) => s.currentTrack?.id == track.id),
@@ -146,7 +151,20 @@ class _TrackRowState extends ConsumerState<TrackRow> {
                     ],
                   ),
                 ),
-                if (widget.showFormat) ...[
+                if (ui.showLyricsIcon && _hasLyrics(track)) ...[
+                  Tooltip(
+                    message: track.syncedLyrics != null
+                        ? 'Synced lyrics'
+                        : 'Lyrics',
+                    child: Icon(
+                      theme.icons.lyrics,
+                      size: 16,
+                      color: theme.colors.textFaint,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                if (widget.showFormat && ui.showFormatTag) ...[
                   Text(
                     track.format.toUpperCase(),
                     style: TextStyle(
@@ -185,8 +203,25 @@ class _TrackRowState extends ConsumerState<TrackRow> {
   }
 }
 
+/// Bar heights (0..1 of the glyph height) for the equalizer at [seconds] of
+/// animation, or the resting shape when [seconds] is null. A pure function of
+/// elapsed time — never of frame count — so the motion looks the same at 30,
+/// 60, 144 or 240 Hz.
+List<double> equalizerFractions(double? seconds) {
+  const rest = [0.55, 0.9, 0.4];
+  const speed = [5.1, 6.3, 4.2];
+  if (seconds == null) return rest;
+  return [
+    for (var i = 0; i < 3; i++)
+      0.25 + 0.75 * (0.5 + 0.5 * math.sin(seconds * speed[i] + i)),
+  ];
+}
+
 /// Three-bar equalizer glyph. Bars move only while [animating]; when paused
 /// they rest at fixed heights, so the playing row is still identifiable.
+/// Painted straight from a time notifier inside its own repaint boundary, so
+/// a new frame repaints just these bars — no widget rebuild, and nothing
+/// around them, however high the refresh rate.
 class EqualizerBars extends StatefulWidget {
   final Color color;
   final bool animating;
@@ -206,12 +241,12 @@ class EqualizerBars extends StatefulWidget {
 class _EqualizerBarsState extends State<EqualizerBars>
     with SingleTickerProviderStateMixin {
   late final Ticker _ticker;
-  Duration _elapsed = Duration.zero;
+  final _seconds = ValueNotifier<double>(0);
 
   @override
   void initState() {
     super.initState();
-    _ticker = createTicker((d) => setState(() => _elapsed = d));
+    _ticker = createTicker((d) => _seconds.value = d.inMicroseconds / 1e6);
     if (widget.animating) _ticker.start();
   }
 
@@ -228,37 +263,56 @@ class _EqualizerBarsState extends State<EqualizerBars>
   @override
   void dispose() {
     _ticker.dispose();
+    _seconds.dispose();
     super.dispose();
   }
 
-  static const _rest = [0.55, 0.9, 0.4];
-  static const _speed = [5.1, 6.3, 4.2];
-
   @override
   Widget build(BuildContext context) {
-    final t = _elapsed.inMilliseconds / 1000;
-    return SizedBox(
-      height: widget.height,
-      width: 16,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          for (var i = 0; i < 3; i++)
-            Container(
-              width: 4,
-              height:
-                  widget.height *
-                  (widget.animating
-                      ? 0.25 + 0.75 * (0.5 + 0.5 * math.sin(t * _speed[i] + i))
-                      : _rest[i]),
-              decoration: BoxDecoration(
-                color: widget.color,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-        ],
+    return RepaintBoundary(
+      child: CustomPaint(
+        size: Size(16, widget.height),
+        painter: _EqualizerPainter(
+          _seconds,
+          animating: widget.animating,
+          color: widget.color,
+        ),
       ),
     );
   }
+}
+
+class _EqualizerPainter extends CustomPainter {
+  final ValueNotifier<double> seconds;
+  final bool animating;
+  final Color color;
+
+  _EqualizerPainter(
+    this.seconds, {
+    required this.animating,
+    required this.color,
+  }) : super(repaint: seconds);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final fractions = equalizerFractions(animating ? seconds.value : null);
+    final paint = Paint()..color = color;
+    const barWidth = 4.0;
+    final gap = (size.width - 3 * barWidth) / 2;
+    for (var i = 0; i < 3; i++) {
+      final h = size.height * fractions[i];
+      final x = i * (barWidth + gap);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x, size.height - h, barWidth, h),
+          const Radius.circular(2),
+        ),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_EqualizerPainter old) =>
+      old.animating != animating || old.color != color;
 }

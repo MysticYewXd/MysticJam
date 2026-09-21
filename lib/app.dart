@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/platform/file_open_channel.dart';
+import 'core/settings/app_settings.dart';
 import 'core/theme/theme_provider.dart';
 import 'core/undo/last_undo_provider.dart';
 import 'features/home_shell.dart';
+import 'widgets/fps_counter.dart';
 
 class MusicPlayerApp extends ConsumerWidget {
   const MusicPlayerApp({super.key});
@@ -21,6 +23,13 @@ class MusicPlayerApp extends ConsumerWidget {
       title: 'MysticJam',
       debugShowCheckedModeBanner: false,
       theme: themeData,
+      builder: (context, child) => Stack(
+        children: [
+          child!,
+          if (ref.watch(uiPrefsProvider).showFps)
+            const Positioned(top: 8, right: 8, child: FpsCounter()),
+        ],
+      ),
       home: CallbackShortcuts(
         // App-wide Ctrl+Z for "undo my last delete" — the same action the
         // snackbar's Undo button triggers (see last_undo_provider.dart), so
