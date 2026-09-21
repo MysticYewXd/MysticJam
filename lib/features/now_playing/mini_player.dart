@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/library/database.dart';
 import '../../core/playback/playback_controller.dart';
 import '../../core/theme/album_palette.dart';
+import '../../core/theme/theme_model.dart';
+import '../../core/theme/theme_provider.dart';
 import '../../widgets/themed/round_buttons.dart';
 import '../../widgets/themed/themed_icon.dart';
 import '../../widgets/themed/track_art.dart';
@@ -21,11 +24,38 @@ class MiniPlayer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(albumAdaptedThemeProvider);
-    final playback = ref.watch(playbackControllerProvider);
-    final controller = ref.read(playbackControllerProvider.notifier);
-    final track = playback.currentTrack;
+    final track = ref.watch(
+      playbackControllerProvider.select((s) => s.currentTrack),
+    );
 
     if (track == null) return const SizedBox.shrink();
+
+    // Child widgets below (RoundIconButton, PlayButton, ThemedIcon, TrackArt)
+    // read themeProvider directly rather than taking a theme parameter, so
+    // without this override they'd render the plain active theme instead of
+    // following the album-adapted one this widget itself uses — see
+    // NowPlayingScreen, which does the same for the same reason.
+    // Its progress line animates continuously while playing; the boundary
+    // keeps each frame's repaint to this card instead of the whole page.
+    return RepaintBoundary(
+      child: ProviderScope(
+        overrides: [themeProvider.overrideWithValue(theme)],
+        child: _MiniPlayerCard(track: track, theme: theme),
+      ),
+    );
+  }
+}
+
+class _MiniPlayerCard extends ConsumerWidget {
+  final Track track;
+  final AppTheme theme;
+
+  const _MiniPlayerCard({required this.track, required this.theme});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final playback = ref.watch(playbackControllerProvider);
+    final controller = ref.read(playbackControllerProvider.notifier);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 500),

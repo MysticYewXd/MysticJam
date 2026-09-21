@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/library/library_providers.dart';
 import '../widgets/themed/dock.dart';
 import '../widgets/themed/themed_icon.dart';
 import 'albums/albums_screen.dart';
@@ -25,6 +26,12 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
+    // A one-off regroup of tracks indexed before album grouping existed —
+    // see albumBackfillProvider's doc comment. Watching (not reading) it
+    // keeps this idempotent across rebuilds via Riverpod's own caching,
+    // rather than needing a manual "already ran" flag here.
+    ref.watch(albumBackfillProvider);
+
     return Scaffold(
       // Stack instead of bottomNavigationBar — a real macOS dock floats
       // directly over the desktop with content scrolling underneath, not

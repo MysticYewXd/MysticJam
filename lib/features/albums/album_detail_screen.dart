@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/library/database.dart';
+import '../../core/library/library_repository.dart';
 import '../../core/playback/playback_controller.dart';
 import '../../core/theme/theme_provider.dart';
 import '../../widgets/themed/themed_icon.dart';
@@ -12,18 +13,13 @@ import '../playlists/playlist_actions.dart';
 import '../../widgets/themed/round_buttons.dart';
 import '../../widgets/themed/track_row.dart';
 
-/// Track listing for a single album — [tracks] are already the album's
-/// tracks (passed in from AlbumsScreen's grouping), so this is read-only,
-/// no reordering.
+/// Track listing for a single album — [album] is already-grouped, joined
+/// data from LibraryRepository.watchAlbums (see AlbumsScreen), so this is
+/// read-only, no reordering.
 class AlbumDetailScreen extends ConsumerWidget {
-  final String album;
-  final List<Track> tracks;
+  final AlbumWithTracks album;
 
-  const AlbumDetailScreen({
-    super.key,
-    required this.album,
-    required this.tracks,
-  });
+  const AlbumDetailScreen({super.key, required this.album});
 
   /// Sorted by track number when known, with untagged tracks (no number at
   /// all) pushed to the end rather than sorted as if they were "track 0" —
@@ -31,7 +27,7 @@ class AlbumDetailScreen extends ConsumerWidget {
   /// artist/title sort happened to produce, which rarely matched the
   /// album's actual sequence.
   List<Track> _sortedTracks() {
-    final sorted = [...tracks];
+    final sorted = [...album.tracks];
     sorted.sort((a, b) {
       final an = a.trackNumber;
       final bn = b.trackNumber;
@@ -61,13 +57,17 @@ class AlbumDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
     final orderedTracks = _sortedTracks();
-    final artPath = tracks
-        .firstWhere((t) => t.albumArtPath != null, orElse: () => tracks.first)
-        .albumArtPath;
+    final subtitleParts = [
+      if (album.artist != null) album.artist!,
+      if (album.year != null) album.year.toString(),
+    ];
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(album, style: TextStyle(color: theme.colors.textPrimary)),
+        title: Text(
+          album.title,
+          style: TextStyle(color: theme.colors.textPrimary),
+        ),
       ),
       body: Column(
         children: [
@@ -76,7 +76,7 @@ class AlbumDetailScreen extends ConsumerWidget {
             child: Row(
               children: [
                 TrackArt(
-                  albumArtPath: artPath,
+                  albumArtPath: album.coverArtPath,
                   size: 72,
                   borderRadius: theme.shapes.cornerRadius,
                 ),
@@ -86,7 +86,7 @@ class AlbumDetailScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        album,
+                        album.title,
                         style: theme.typography.display(
                           28,
                           color: theme.colors.textPrimary,
@@ -96,10 +96,20 @@ class AlbumDetailScreen extends ConsumerWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
+                      if (subtitleParts.isNotEmpty)
+                        Text(
+                          subtitleParts.join(' · '),
+                          style: TextStyle(
+                            color: theme.colors.textSecondary,
+                            fontSize: 13,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       Text(
-                        '${tracks.length} track${tracks.length == 1 ? '' : 's'}',
+                        '${album.tracks.length} track${album.tracks.length == 1 ? '' : 's'}',
                         style: TextStyle(
-                          color: theme.colors.textSecondary,
+                          color: theme.colors.textFaint,
                           fontSize: 12,
                         ),
                       ),

@@ -1,24 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/library/database.dart';
 import '../../core/library/library_providers.dart';
+import '../../core/library/library_repository.dart';
 import '../../core/theme/theme_provider.dart';
 import '../../widgets/themed/themed_card.dart';
 import '../../widgets/themed/themed_search_bar.dart';
-import '../now_playing/mini_player.dart';
 import '../../widgets/themed/track_art.dart';
+import '../now_playing/mini_player.dart';
 import 'album_detail_screen.dart';
 
-class _Album {
-  final String name;
-  final List<Track> tracks;
-  _Album(this.name, this.tracks);
-}
-
-/// Groups the library by album — a companion to LibraryScreen's
-/// artist-grouped view. Tracks with no album tag are bucketed together
-/// under "Unknown Album" rather than dropped.
+/// Grid of every album — a companion to LibraryScreen's artist-grouped view.
+/// Queries [albumsProvider] (a join over the Albums/Tracks tables, see
+/// LibraryRepository.watchAlbums), not a re-derivation from raw track tags —
+/// grouping lives in the database now, this just displays it. Tracks with no
+/// usable album tag land in the shared "Unknown Album" bucket rather than
+/// being dropped.
 class AlbumsScreen extends ConsumerStatefulWidget {
   const AlbumsScreen({super.key});
 
@@ -29,28 +26,16 @@ class AlbumsScreen extends ConsumerStatefulWidget {
 class _AlbumsScreenState extends ConsumerState<AlbumsScreen> {
   String _query = '';
 
-  List<_Album> _groupByAlbum(List<Track> tracks) {
-    final byAlbum = <String, List<Track>>{};
-    for (final track in tracks) {
-      final album = track.album?.trim();
-      final label = (album == null || album.isEmpty) ? 'Unknown Album' : album;
-      byAlbum.putIfAbsent(label, () => []).add(track);
-    }
-    final albums = byAlbum.entries.map((e) => _Album(e.key, e.value)).toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
-    return albums;
-  }
-
-  List<_Album> _filter(List<_Album> albums) {
+  List<AlbumWithTracks> _filter(List<AlbumWithTracks> albums) {
     if (_query.isEmpty) return albums;
     final q = _query.toLowerCase();
-    return albums.where((a) => a.name.toLowerCase().contains(q)).toList();
+    return albums.where((a) => a.title.toLowerCase().contains(q)).toList();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
-    final tracksAsync = ref.watch(tracksProvider);
+    final albumsAsync = ref.watch(albumsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -59,9 +44,9 @@ class _AlbumsScreenState extends ConsumerState<AlbumsScreen> {
           style: TextStyle(color: theme.colors.textPrimary),
         ),
       ),
-      body: tracksAsync.when(
-        data: (allTracks) {
-          if (allTracks.isEmpty) {
+      body: albumsAsync.when(
+        data: (allAlbums) {
+          if (allAlbums.isEmpty) {
             return Center(
               child: Text(
                 'No albums yet',
@@ -70,7 +55,7 @@ class _AlbumsScreenState extends ConsumerState<AlbumsScreen> {
             );
           }
 
-          final albums = _filter(_groupByAlbum(allTracks));
+          final albums = _filter(allAlbums);
 
           return Column(
             children: [
@@ -106,19 +91,10 @@ class _AlbumsScreenState extends ConsumerState<AlbumsScreen> {
                         itemCount: albums.length,
                         itemBuilder: (context, index) {
                           final album = albums[index];
-                          final artPath = album.tracks
-                              .firstWhere(
-                                (t) => t.albumArtPath != null,
-                                orElse: () => album.tracks.first,
-                              )
-                              .albumArtPath;
                           return ThemedCard(
                             onTap: () => Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => AlbumDetailScreen(
-                                  album: album.name,
-                                  tracks: album.tracks,
-                                ),
+                                builder: (_) => AlbumDetailScreen(album: album),
                               ),
                             ),
                             padding: const EdgeInsets.all(8),
@@ -129,7 +105,7 @@ class _AlbumsScreenState extends ConsumerState<AlbumsScreen> {
                                   aspectRatio: 1,
                                   child: LayoutBuilder(
                                     builder: (context, constraints) => TrackArt(
-                                      albumArtPath: artPath,
+                                      albumArtPath: album.coverArtPath,
                                       size: constraints.maxWidth,
                                       borderRadius:
                                           theme.shapes.cornerRadius * 0.8,
@@ -138,11 +114,10 @@ class _AlbumsScreenState extends ConsumerState<AlbumsScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  album.name,
-                                  style: TextStyle(
+                                  album.title,
+                                  style: theme.typography.display(
+                                    14,
                                     color: theme.colors.textPrimary,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -150,7 +125,7 @@ class _AlbumsScreenState extends ConsumerState<AlbumsScreen> {
                                 Text(
                                   '${album.tracks.length} track${album.tracks.length == 1 ? '' : 's'}',
                                   style: TextStyle(
-                                    color: theme.colors.textSecondary,
+                                    color: theme.colors.textFaint,
                                     fontSize: 11,
                                   ),
                                 ),

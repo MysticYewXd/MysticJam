@@ -81,83 +81,97 @@ class _DockState extends ConsumerState<Dock> {
     // than it needs costs nothing visually, unlike the old pill height.
     final maxIconHeight = widget.magnifiedSize + 40;
 
-    return MouseRegion(
-      onHover: (event) => _mouseX.value = event.position.dx,
-      onExit: (_) => _mouseX.value = double.infinity,
-      child: SizedBox(
-        height: maxIconHeight,
-        child: Stack(
-          clipBehavior: Clip.none,
-          alignment: Alignment.bottomCenter,
-          children: [
-            // The glass pill itself — fixed resting height, bottom-anchored
-            // in the Stack so it sits right under the icons regardless of
-            // how tall the transparent Stack above it is.
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(28),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.35),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(28),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-                    child: Container(
-                      height: restPillHeight,
-                      decoration: BoxDecoration(
-                        color: theme.colors.surface.withValues(alpha: 0.55),
-                        borderRadius: BorderRadius.circular(28),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.08),
+    // Separate layer: hover magnification repaints only the dock, and the
+    // page's own animations don't repaint it.
+    return RepaintBoundary(
+      child: MouseRegion(
+        onHover: (event) {
+          // This region is taller than the visible pill (extra headroom for
+          // magnified icons to rise into, see maxIconHeight below) — without
+          // this gate, the dock started magnifying as soon as the cursor
+          // entered that empty reserved space above the pill, well before it
+          // actually reached the dock. Only the pill's own vertical band, at
+          // the bottom of this region, should count as "on the dock".
+          final onPill =
+              event.localPosition.dy >= maxIconHeight - restPillHeight;
+          _mouseX.value = onPill ? event.position.dx : double.infinity;
+        },
+        onExit: (_) => _mouseX.value = double.infinity,
+        child: SizedBox(
+          height: maxIconHeight,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.bottomCenter,
+            children: [
+              // The glass pill itself — fixed resting height, bottom-anchored
+              // in the Stack so it sits right under the icons regardless of
+              // how tall the transparent Stack above it is.
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(28),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(28),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                      child: Container(
+                        height: restPillHeight,
+                        decoration: BoxDecoration(
+                          color: theme.colors.surface.withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(28),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.08),
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-            // Icons sit above the pill in the Stack (not inside its
-            // ClipRRect), so a magnified icon can visually overlap the
-            // pill's top edge instead of being clipped by it.
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              // Three icons at base size need ~190px of width — narrower
-              // than that (a narrow/minimized window) and the Row can't
-              // fit them, which overflowed rather than resizing since the
-              // icons themselves have a fixed minimum size. A horizontal
-              // scroll is the same safety net used for Now Playing's
-              // transport-controls row for the identical problem: it never
-              // overflows, it just becomes scrollable at extreme widths.
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    for (final item in widget.items)
-                      _DockIcon(
-                        key: ValueKey(item.slot),
-                        item: item,
-                        mouseX: _mouseX,
-                        baseSize: widget.baseSize,
-                        magnifiedSize: widget.magnifiedSize,
-                        influenceDistance: widget.influenceDistance,
-                      ),
-                  ],
+              // Icons sit above the pill in the Stack (not inside its
+              // ClipRRect), so a magnified icon can visually overlap the
+              // pill's top edge instead of being clipped by it.
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                // Three icons at base size need ~190px of width — narrower
+                // than that (a narrow/minimized window) and the Row can't
+                // fit them, which overflowed rather than resizing since the
+                // icons themselves have a fixed minimum size. A horizontal
+                // scroll is the same safety net used for Now Playing's
+                // transport-controls row for the identical problem: it never
+                // overflows, it just becomes scrollable at extreme widths.
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      for (final item in widget.items)
+                        _DockIcon(
+                          key: ValueKey(item.slot),
+                          item: item,
+                          mouseX: _mouseX,
+                          baseSize: widget.baseSize,
+                          magnifiedSize: widget.magnifiedSize,
+                          influenceDistance: widget.influenceDistance,
+                        ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
