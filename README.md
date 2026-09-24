@@ -5,6 +5,8 @@
 A local-only Flutter music player for Linux desktop — no accounts, no
 streaming, no cloud. Everything lives in your own library on disk.
 
+## VIBE CODED WITH CLAUDE CODE
+
 ## Development
 
 ```sh
