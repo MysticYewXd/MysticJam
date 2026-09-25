@@ -27,7 +27,15 @@ jobs:
 
       - run: flutter pub get
 
-      - run: flutter build windows --release
+      - name: Build
+        # The permission_handler_windows plugin still uses the deprecated
+        # <experimental/coroutine> header; newer MSVC (on windows-latest)
+        # treats that as a hard error rather than a warning. CL is read
+        # automatically by cl.exe as extra command-line options, so this
+        # silences just that one deprecation instead of patching the plugin.
+        env:
+          CL: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
+        run: flutter build windows --release
 
       - name: Zip the app
         shell: pwsh
