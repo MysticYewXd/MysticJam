@@ -1,43 +1,15 @@
-import 'dart:async';
+import 'dart:io';
 
-import 'package:volume_controller/volume_controller.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'linux_system_volume_controller.dart';
+import 'plugin_system_volume_controller.dart';
 import 'system_volume_controller.dart';
 
-/// Android and Windows implementation via the `volume_controller` plugin,
-/// which talks to the OS directly (Android's AudioManager STREAM_MUSIC,
-/// Windows' default audio endpoint) — the real system media volume.
-class PluginSystemVolumeController implements SystemVolumeController {
-  PluginSystemVolumeController() {
-    // Don't pop the OS volume HUD every time the in-app slider moves.
-    VolumeController.instance.showSystemUI = false;
-  }
-
-  StreamController<double>? _changes;
-
-  @override
-  Future<double> getVolume() => VolumeController.instance.getVolume();
-
-  @override
-  Future<void> setVolume(double volume) => VolumeController.instance.setVolume(volume.clamp(0.0, 1.0));
-
-  @override
-  Stream<double> get volumeChanges {
-    _changes ??= StreamController<double>.broadcast(
-      onListen: () {
-        VolumeController.instance.addListener(
-          (v) => _changes?.add(v),
-          fetchInitialVolume: false,
-        );
-      },
-      onCancel: () => VolumeController.instance.removeListener(),
-    );
-    return _changes!.stream;
-  }
-
-  @override
-  void dispose() {
-    VolumeController.instance.removeListener();
-    _changes?.close();
-  }
-}
+final systemVolumeControllerProvider = Provider<SystemVolumeController>((ref) {
+  final controller = Platform.isLinux
+      ? LinuxSystemVolumeController()
+      : PluginSystemVolumeController();
+  ref.onDispose(controller.dispose);
+  return controller;
+});
