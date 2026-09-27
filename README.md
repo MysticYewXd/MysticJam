@@ -17,7 +17,7 @@ To build and run on Linux you need:
 - **libmpv** — the app uses it to play audio, and it is not bundled with the
   app, so it must be installed on the system. On Ubuntu/Debian:
   `sudo apt install libmpv2` (or `libmpv-dev` if the build asks for it).
-  Package names can differ on other distributions.
+  Package names can differ on other distributions. For Fedora use `sudo dnf install libmpv-devel`
 
 ## Installing (from a release download)
 
