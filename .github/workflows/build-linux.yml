@@ -1,0 +1,62 @@
+name: Build Linux
+
+on:
+  # The "Run workflow" button in the repo's Actions tab.
+  workflow_dispatch:
+  # Also builds and attaches the tarball to the release when you push a tag
+  # like v0.1.0.
+  push:
+    tags: ['v*']
+
+jobs:
+  linux:
+    # Built on Ubuntu 24.04, like the earlier hand-made releases.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write   # needed to attach the tarball to a release
+    steps:
+      - uses: actions/checkout@v4
+
+      # Flutter's Linux desktop build tools. libmpv isn't needed to build:
+      # media_kit loads it at runtime from the user's system.
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # Same Flutter version the app is developed with.
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+
+      - run: flutter --version
+
+      - run: flutter pub get
+
+      - name: Build
+        run: flutter build linux --release
+
+      - name: Package
+        # Same layout as the earlier releases: the bundle (which already
+        # carries share/applications and share/icons), plus the installer,
+        # uninstaller and a short README, in a MysticJam/ folder.
+        run: |
+          mkdir -p dist
+          cp -a build/linux/x64/release/bundle dist/MysticJam
+          cp linux/packaging/install.sh linux/packaging/uninstall.sh \
+            linux/packaging/README.txt dist/MysticJam/
+          chmod +x dist/MysticJam/install.sh dist/MysticJam/uninstall.sh
+          tar -czf MysticJam-linux-x64.tar.gz -C dist MysticJam
+
+      # Download it from the bottom of the workflow run's page.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MysticJam-linux-x64
+          path: MysticJam-linux-x64.tar.gz
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: MysticJam-linux-x64.tar.gz
