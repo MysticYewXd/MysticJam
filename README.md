@@ -40,6 +40,7 @@ No accounts, no streaming, no cloud, no tracking. It plays the music files you a
 - [Building from source](#building-from-source)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
+- [License](#license)
 
 ---
 
@@ -464,5 +465,11 @@ Then [open an issue](https://github.com/MysticYewXd/MysticJam/issues) with what 
 Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first: it covers the project's scope (local-only, no streaming, no audio DSP), its architecture rules, and how to run the tests. Security issues are covered in [SECURITY.md](SECURITY.md).
 
 The interface uses the **DM Sans** and **Fraunces** fonts under the [SIL Open Font License](assets/fonts/OFL.txt).
+
+---
+
+## License
+
+MysticJam is released under the [MIT License](LICENSE).
 
 <div align="center"><sub>Made by Kong. A sibling of <a href="https://github.com/MysticYewXd/MysticQuaere">MysticQuaere</a>.</sub></div>
