@@ -10,6 +10,7 @@ import 'album_grouping.dart';
 import 'database.dart';
 import 'library_repository.dart';
 import 'metadata/metadata_reader.dart';
+import 'metadata/track_metadata.dart';
 
 const _coverArtBaseNames = ['cover', 'folder', 'album', 'front', 'albumart'];
 const _coverArtExtensions = ['jpg', 'jpeg', 'png'];
@@ -24,6 +25,28 @@ const _coverArtExtensions = ['jpg', 'jpeg', 'png'];
 /// progress still has to finish, but 200 files' worth is a bounded, short
 /// wait either way.
 const _batchSize = 200;
+
+/// How many files are read from disk at once inside a batch. Tag reading is
+/// almost all waiting on I/O, so overlapping a handful of reads keeps the
+/// disk busy instead of reading one file, parsing it, writing it, and only
+/// then starting the next. Database writes stay strictly one at a time.
+const _readConcurrency = 8;
+
+/// Everything read from disk for one file, gathered before any database
+/// write so the reads for several files can run concurrently.
+class _FileRead {
+  final ParsedMetadata metadata;
+  final String? syncedLyrics;
+  final Uint8List? externalArtwork;
+  const _FileRead(this.metadata, this.syncedLyrics, this.externalArtwork);
+
+  /// Marker for a file whose read threw (see [LibraryScanner._writeFile]).
+  /// Non-const on purpose, so the two markers are distinct instances.
+  static final failed = _FileRead(ParsedMetadata.empty, null, null);
+
+  /// Marker for a file a forced re-scan found missing from disk.
+  static final gone = _FileRead(ParsedMetadata.empty, null, null);
+}
 
 /// Lets a caller ask an in-progress scan to stop early — checked once per
 /// file, so cancellation takes effect within roughly one file's processing
@@ -83,31 +106,122 @@ class LibraryScanner {
 
   LibraryScanner(this.repository);
 
-  /// Indexes [path]. Normally skips files already in the library — pass
-  /// [forceRescan] to re-parse and overwrite an existing entry instead (used
-  /// by "Refresh Metadata" to pick up tags for tracks indexed before this
-  /// feature existed, or before a given format had a reader).
+  /// Folder-art lookups for the current scan, keyed by directory. Holding
+  /// the Future (not the bytes) means concurrent reads of tracks in the
+  /// same album share one directory listing. Cleared between batches so a
+  /// large library doesn't keep every album's cover in memory.
+  final _folderArtCache = <String, Future<Uint8List?>>{};
+
+  /// Cached album_art directory, resolved once instead of once per track.
+  Future<String?>? _artDirPath;
+
+  /// Reads [paths] in chunks of [_readConcurrency] and indexes each one in
+  /// order, calling [onIndexed] after every file. Must run inside a
+  /// transaction (see [_batchSize]). [known] holds every path already in
+  /// the library, loaded once per scan rather than queried per file.
+  /// Returns false if [cancellationToken] stopped it partway.
+  Future<bool> _indexBatch(
+    List<String> paths, {
+    required Set<String> known,
+    required bool forceRescan,
+    ScanCancellationToken? cancellationToken,
+    required void Function(String path, _IndexOutcome outcome) onIndexed,
+  }) async {
+    try {
+      for (var i = 0; i < paths.length; i += _readConcurrency) {
+        // Checked per chunk and per file, not just once per batch: onIndexed
+        // (where a caller's cancellationToken.cancel() actually gets called)
+        // fires from inside this same loop, and a batch can hold up to
+        // _batchSize files — a between-batches-only check would let an
+        // entire small scan finish before a cancellation requested during
+        // its own progress callback ever took effect.
+        if (cancellationToken?.isCancelled ?? false) return false;
+        final chunk = paths.skip(i).take(_readConcurrency).toList();
+        final reads = await Future.wait([
+          for (final path in chunk)
+            _readFile(
+              path,
+              known: known,
+              forceRescan: forceRescan,
+            ).then<_FileRead?>(
+              (read) => read,
+              onError: (Object _) => _FileRead.failed,
+            ),
+        ]);
+        for (var j = 0; j < chunk.length; j++) {
+          if (cancellationToken?.isCancelled ?? false) return false;
+          final path = chunk[j];
+          final outcome = await _writeFile(
+            path,
+            reads[j],
+            alreadyIndexed: known.contains(path),
+          );
+          if (outcome == _IndexOutcome.added) known.add(path);
+          if (outcome == _IndexOutcome.removed) known.remove(path);
+          onIndexed(path, outcome);
+        }
+      }
+      return true;
+    } finally {
+      _folderArtCache.clear();
+    }
+  }
+
+  /// The disk-reading half of indexing [path]. Returns null when the file
+  /// is already indexed and this isn't a forced re-scan, and
+  /// [_FileRead.gone] when a forced re-scan finds it missing. A read that
+  /// throws is mapped to [_FileRead.failed] by [_indexBatch].
+  Future<_FileRead?> _readFile(
+    String path, {
+    required Set<String> known,
+    required bool forceRescan,
+  }) async {
+    if (known.contains(path) && !forceRescan) return null;
+    if (forceRescan && !await File(path).exists()) return _FileRead.gone;
+
+    final reads = await Future.wait<Object?>([
+      readTrackMetadata(path),
+      _findLrcSidecar(path),
+    ]);
+    final metadata = reads[0] as ParsedMetadata;
+    // Embedded art (ID3 APIC / FLAC PICTURE) takes priority; many FLAC
+    // rips ship art as a plain cover.jpg/folder.jpg next to the audio
+    // instead of embedding it, so that's the fallback.
+    final externalArt = metadata.artwork == null
+        ? await _folderArtCache.putIfAbsent(
+            p.dirname(path),
+            () => _findExternalArtwork(path),
+          )
+        : null;
+    return _FileRead(metadata, reads[1] as String?, externalArt);
+  }
+
+  /// The database half of indexing [path]. Normally skips files already in
+  /// the library — on a forced re-scan (used by "Refresh Metadata" to pick
+  /// up tags for tracks indexed before this feature existed, or before a
+  /// given format had a reader) it overwrites the existing entry instead,
+  /// or removes it when the file is gone.
   ///
   /// Never throws — one corrupt/unreadable file must not abort a whole
   /// batch scan or refresh; the outcome is reported instead (see
   /// [_IndexOutcome.failed]) rather than silently discarded.
-  Future<_IndexOutcome> _indexFile(
-    String path, {
-    bool forceRescan = false,
+  Future<_IndexOutcome> _writeFile(
+    String path,
+    _FileRead? read, {
+    required bool alreadyIndexed,
   }) async {
+    if (read == null) return _IndexOutcome.unchanged;
+    if (identical(read, _FileRead.failed)) return _IndexOutcome.failed;
     try {
-      final alreadyIndexed = await repository.trackExists(path);
-      if (alreadyIndexed && !forceRescan) return _IndexOutcome.unchanged;
-
-      if (forceRescan && !await File(path).exists()) {
+      if (identical(read, _FileRead.gone)) {
         await repository.deleteTrackByPath(path);
         return _IndexOutcome.removed;
       }
 
+      final metadata = read.metadata;
       final ext = p.extension(path).replaceFirst('.', '').toLowerCase();
-      final metadata = await readTrackMetadata(path);
       final title = metadata.title ?? p.basenameWithoutExtension(path);
-      final syncedLyrics = await _findLrcSidecar(path);
+      final syncedLyrics = read.syncedLyrics;
 
       // Album membership comes from the tags alone (see albumKeyFor) — never
       // the folder — and falls back to the Unknown Album bucket when the
@@ -154,10 +268,7 @@ class LibraryScanner {
         ),
       );
 
-      // Embedded art (ID3 APIC / FLAC PICTURE) takes priority; many FLAC
-      // rips ship art as a plain cover.jpg/folder.jpg next to the audio
-      // instead of embedding it, so that's the fallback.
-      final artwork = metadata.artwork ?? await _findExternalArtwork(path);
+      final artwork = metadata.artwork ?? read.externalArtwork;
       if (artwork != null) {
         final artPath = await _saveArtwork(id, artwork);
         if (artPath != null) {
@@ -197,16 +308,16 @@ class LibraryScanner {
   }) async {
     final paths = await repository.getAllFilePaths();
     final found = <String, ({String? plain, String? synced})>{};
-    for (var i = 0; i < paths.length; i++) {
-      final path = paths[i];
-      if (await File(path).exists()) {
-        final synced = await _findLrcSidecar(path);
-        final plain = (await readTrackMetadata(path)).lyrics;
-        if (synced != null || plain != null) {
-          found[path] = (plain: plain, synced: synced);
-        }
+    for (var i = 0; i < paths.length; i += _readConcurrency) {
+      final chunk = paths.skip(i).take(_readConcurrency).toList();
+      final results = await Future.wait([
+        for (final path in chunk) _readLyrics(path),
+      ]);
+      for (var j = 0; j < chunk.length; j++) {
+        final r = results[j];
+        if (r != null) found[chunk[j]] = r;
       }
-      onProgress?.call(i + 1, paths.length);
+      onProgress?.call(i + chunk.length, paths.length);
     }
     await repository.setLyricsForPaths(found);
     AppLog.info('scan', 'lyrics rescan finished', {
@@ -214,6 +325,14 @@ class LibraryScanner {
       'found': found.length,
     });
     return found.length;
+  }
+
+  Future<({String? plain, String? synced})?> _readLyrics(String path) async {
+    if (!await File(path).exists()) return null;
+    final synced = await _findLrcSidecar(path);
+    final plain = (await readTrackMetadata(path)).lyrics;
+    if (synced == null && plain == null) return null;
+    return (plain: plain, synced: synced);
   }
 
   /// Reads `<same name>.lrc` next to [audioFilePath], if it exists — a
@@ -264,12 +383,27 @@ class LibraryScanner {
     return null;
   }
 
-  Future<String?> _saveArtwork(int trackId, Uint8List bytes) async {
+  Future<String?> _resolveArtDir() async {
     try {
       final supportDir = await getApplicationSupportDirectory();
       final artDir = Directory(p.join(supportDir.path, 'album_art'));
-      if (!await artDir.exists()) await artDir.create(recursive: true);
-      final file = File(p.join(artDir.path, '$trackId.art'));
+      await artDir.create(recursive: true);
+      return artDir.path;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> _saveArtwork(int trackId, Uint8List bytes) async {
+    try {
+      var dirPath = await (_artDirPath ??= _resolveArtDir());
+      if (dirPath == null || !Directory(dirPath).existsSync()) {
+        // First attempt failed, or the folder was deleted mid-session —
+        // try again rather than losing art for the rest of the session.
+        dirPath = await (_artDirPath = _resolveArtDir());
+        if (dirPath == null) return null;
+      }
+      final file = File(p.join(dirPath, '$trackId.art'));
       await file.writeAsBytes(bytes);
       return file.path;
     } catch (_) {
@@ -349,26 +483,24 @@ class LibraryScanner {
     var wasCancelled = false;
     var batch = <String>[];
 
+    final known = (await repository.getAllFilePaths()).toSet();
+
     Future<void> flushBatch() async {
       if (batch.isEmpty) return;
       await repository.db.transaction(() async {
-        for (final path in batch) {
-          // Checked per-file, not just once per batch: onProgress (where a
-          // caller's cancellationToken.cancel() actually gets called) fires
-          // from inside this same loop, and a batch can hold up to
-          // _batchSize files — a between-batches-only check would let an
-          // entire small scan finish before a cancellation requested during
-          // its own progress callback ever took effect.
-          if (cancellationToken?.isCancelled ?? false) {
-            wasCancelled = true;
-            return;
-          }
-          final outcome = await _indexFile(path, forceRescan: forceRescan);
-          if (outcome == _IndexOutcome.added) added++;
-          if (outcome == _IndexOutcome.failed) failedPaths.add(path);
-          processed++;
-          onProgress?.call(processed);
-        }
+        final finished = await _indexBatch(
+          batch,
+          known: known,
+          forceRescan: forceRescan,
+          cancellationToken: cancellationToken,
+          onIndexed: (path, outcome) {
+            if (outcome == _IndexOutcome.added) added++;
+            if (outcome == _IndexOutcome.failed) failedPaths.add(path);
+            processed++;
+            onProgress?.call(processed);
+          },
+        );
+        if (!finished) wasCancelled = true;
       });
       batch = [];
     }
@@ -423,25 +555,30 @@ class LibraryScanner {
     var processed = 0;
     var wasCancelled = false;
 
+    final known = supported.isEmpty
+        ? <String>{}
+        : (await repository.getAllFilePaths()).toSet();
+
     for (var i = 0; i < supported.length; i += _batchSize) {
       if (wasCancelled || (cancellationToken?.isCancelled ?? false)) {
         wasCancelled = true;
         break;
       }
-      final batch = supported.skip(i).take(_batchSize);
+      final batch = supported.skip(i).take(_batchSize).toList();
       await repository.db.transaction(() async {
-        for (final path in batch) {
-          // See scanDirectory's flushBatch for why this is checked per-file.
-          if (cancellationToken?.isCancelled ?? false) {
-            wasCancelled = true;
-            return;
-          }
-          final outcome = await _indexFile(path, forceRescan: forceRescan);
-          if (outcome == _IndexOutcome.added) added++;
-          if (outcome == _IndexOutcome.failed) failedPaths.add(path);
-          processed++;
-          onProgress?.call(processed);
-        }
+        final finished = await _indexBatch(
+          batch,
+          known: known,
+          forceRescan: forceRescan,
+          cancellationToken: cancellationToken,
+          onIndexed: (path, outcome) {
+            if (outcome == _IndexOutcome.added) added++;
+            if (outcome == _IndexOutcome.failed) failedPaths.add(path);
+            processed++;
+            onProgress?.call(processed);
+          },
+        );
+        if (!finished) wasCancelled = true;
       });
     }
 
@@ -474,24 +611,27 @@ class LibraryScanner {
     var processed = 0;
     var wasCancelled = false;
 
+    final known = paths.toSet();
+
     for (var i = 0; i < paths.length; i += _batchSize) {
       if (wasCancelled || (cancellationToken?.isCancelled ?? false)) {
         wasCancelled = true;
         break;
       }
-      final batch = paths.skip(i).take(_batchSize);
+      final batch = paths.skip(i).take(_batchSize).toList();
       await repository.db.transaction(() async {
-        for (final path in batch) {
-          // See scanDirectory's flushBatch for why this is checked per-file.
-          if (cancellationToken?.isCancelled ?? false) {
-            wasCancelled = true;
-            return;
-          }
-          final outcome = await _indexFile(path, forceRescan: true);
-          if (outcome == _IndexOutcome.removed) removed++;
-          processed++;
-          onProgress?.call(processed, paths.length);
-        }
+        final finished = await _indexBatch(
+          batch,
+          known: known,
+          forceRescan: true,
+          cancellationToken: cancellationToken,
+          onIndexed: (path, outcome) {
+            if (outcome == _IndexOutcome.removed) removed++;
+            processed++;
+            onProgress?.call(processed, paths.length);
+          },
+        );
+        if (!finished) wasCancelled = true;
       });
     }
 
