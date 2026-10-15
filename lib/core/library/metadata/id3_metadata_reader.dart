@@ -13,7 +13,7 @@ import 'year_parser.dart';
 /// in whatever ID3v2 didn't provide.
 Future<ParsedMetadata> readId3Metadata(String filePath) async {
   try {
-    final bytes = await File(filePath).readAsBytes();
+    final bytes = await _readTagBytes(filePath);
     final results = await TagProcessor().getTagsFromByteArray(
       Future.value(bytes),
     );
@@ -87,6 +87,56 @@ Future<ParsedMetadata> readId3Metadata(String filePath) async {
     // Corrupt/unreadable tags shouldn't block indexing — the scanner falls
     // back to the filename, same as any untagged file.
     return ParsedMetadata.empty;
+  }
+}
+
+/// The ID3v1 block is always the last 128 bytes of the file.
+const _id3v1Size = 128;
+
+/// Returns just the parts of the file the tags can live in — the ID3v2 tag
+/// at the front (its size comes from the 10-byte header) plus the last 128
+/// bytes for ID3v1 — instead of the whole file. Reading an entire 8-10 MB
+/// MP3 just to look at a few kilobytes of tags was the single biggest cost
+/// of a library scan. dart_tags only ever looks at the start of the buffer
+/// (ID3v2) and its last 128 bytes (ID3v1), so the stitched-together buffer
+/// parses identically to the full file.
+Future<Uint8List> _readTagBytes(String filePath) async {
+  final raf = await File(filePath).open();
+  try {
+    final length = await raf.length();
+    final header = await raf.read(10);
+
+    var headSize = 0;
+    if (header.length == 10 &&
+        header[0] == 0x49 && // 'I'
+        header[1] == 0x44 && // 'D'
+        header[2] == 0x33) {
+      // Synchsafe size: 4 bytes of 7 bits each, excluding the header itself.
+      final tagSize =
+          (header[6] & 0x7f) << 21 |
+          (header[7] & 0x7f) << 14 |
+          (header[8] & 0x7f) << 7 |
+          (header[9] & 0x7f);
+      final hasFooter = header[5] & 0x10 != 0;
+      headSize = 10 + tagSize + (hasFooter ? 10 : 0);
+    }
+
+    // Small file, or the two regions overlap — just take all of it.
+    if (headSize + _id3v1Size >= length) {
+      await raf.setPosition(0);
+      return await raf.read(length);
+    }
+
+    final out = BytesBuilder(copy: false);
+    if (headSize > 0) {
+      await raf.setPosition(0);
+      out.add(await raf.read(headSize));
+    }
+    await raf.setPosition(length - _id3v1Size);
+    out.add(await raf.read(_id3v1Size));
+    return out.takeBytes();
+  } finally {
+    await raf.close();
   }
 }
 

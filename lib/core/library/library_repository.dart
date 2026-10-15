@@ -139,8 +139,11 @@ class LibraryRepository {
   /// new format reader was added), since the normal scan skips anything
   /// it already recognizes as indexed.
   Future<List<String>> getAllFilePaths() async {
-    final rows = await db.select(db.tracks).get();
-    return rows.map((t) => t.filePath).toList();
+    // Only the path column — a full-row select would also drag every
+    // track's lyrics text across the isolate boundary just to drop it.
+    final query = db.selectOnly(db.tracks)..addColumns([db.tracks.filePath]);
+    final rows = await query.get();
+    return [for (final row in rows) row.read(db.tracks.filePath)!];
   }
 
   /// Looks up the track ids currently indexed for [filePaths] — used to add
