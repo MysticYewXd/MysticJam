@@ -17,11 +17,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Flutter's Linux desktop build tools. libmpv isn't needed to build:
+      # Flutter's Linux desktop build tools, plus ALSA for volume_controller.
+      # libmpv isn't needed to build:
       # media_kit loads it at runtime from the user's system.
       - run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libasound2-dev
 
       - uses: subosito/flutter-action@v2
         with:
