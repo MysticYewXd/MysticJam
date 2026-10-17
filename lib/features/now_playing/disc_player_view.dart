@@ -221,14 +221,15 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
     if (delta < -math.pi) delta += 2 * math.pi;
     _lastPointerAngle = a;
     _angle.value += delta;
-    final duration = ref.read(playbackControllerProvider).duration;
-    final ms =
+    final int maxMs = math.max(
+      0,
+      ref.read(playbackControllerProvider).duration.inMilliseconds,
+    );
+    final int ms =
         _scrubPos.inMilliseconds +
         (delta / (2 * math.pi) * _secondsPerTurn * 1000).round();
     setState(() {
-      _scrubPos = Duration(
-        milliseconds: ms.clamp(0, math.max(0, duration.inMilliseconds)),
-      );
+      _scrubPos = Duration(milliseconds: ms.clamp(0, maxMs).toInt());
     });
   }
 
@@ -243,10 +244,10 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
     final playback = ref.read(playbackControllerProvider);
     if (playback.currentTrack == null) return;
     final step = e.scrollDelta.dy > 0 ? -5 : 5;
-    final ms = (playback.position.inMilliseconds + step * 1000).clamp(
-      0,
-      math.max(0, playback.duration.inMilliseconds),
-    );
+    final int maxMs = math.max(0, playback.duration.inMilliseconds);
+    final int ms = (playback.position.inMilliseconds + step * 1000)
+        .clamp(0, maxMs)
+        .toInt();
     _angle.value += step / _secondsPerTurn * 2 * math.pi;
     ref
         .read(playbackControllerProvider.notifier)
@@ -600,7 +601,7 @@ class _Disc extends StatelessWidget {
   final GestureDragStartCallback onPanStart;
   final GestureDragUpdateCallback onPanUpdate;
   final GestureDragEndCallback onPanEnd;
-  final PointerSignalEventListener onPointerSignal;
+  final void Function(PointerSignalEvent) onPointerSignal;
 
   const _Disc({
     required this.size,
