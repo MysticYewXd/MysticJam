@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -84,23 +85,24 @@ final _discMoodProvider = FutureProvider.family<DiscMood, String?>((
 
 /// The cover decoded at disc resolution. Auto-disposed so only the albums
 /// actually on screen stay in memory.
-final _discArtProvider = FutureProvider.autoDispose.family<ui.Image?, String?>(
-  (ref, path) async {
-    if (path == null) return null;
-    try {
-      final bytes = await File(path).readAsBytes();
-      final codec = await ui.instantiateImageCodec(bytes, targetWidth: 720);
-      final frame = await codec.getNextFrame();
-      codec.dispose();
-      // Not disposed explicitly: the view keeps showing the previous cover
-      // while the next one decodes, so it may outlive this provider. The
-      // engine frees it once nothing references it.
-      return frame.image;
-    } catch (_) {
-      return null;
-    }
-  },
-);
+final _discArtProvider = FutureProvider.autoDispose.family<ui.Image?, String?>((
+  ref,
+  path,
+) async {
+  if (path == null) return null;
+  try {
+    final bytes = await File(path).readAsBytes();
+    final codec = await ui.instantiateImageCodec(bytes, targetWidth: 720);
+    final frame = await codec.getNextFrame();
+    codec.dispose();
+    // Not disposed explicitly: the view keeps showing the previous cover
+    // while the next one decodes, so it may outlive this provider. The
+    // engine frees it once nothing references it.
+    return frame.image;
+  } catch (_) {
+    return null;
+  }
+});
 
 // ---------------------------------------------------------------------------
 // The view
@@ -141,16 +143,24 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
 
   // Scrubbing state (drag on the disc).
   bool _scrubbing = false;
-  Duration _scrubPos = Duration.zero;
   double _lastPointerAngle = 0;
+
+  // What the progress arc and OLED clock show: the playback position, or the
+  // scrub position while dragging. A notifier rather than widget state, so a
+  // position tick (many per second) repaints just those two instead of
+  // rebuilding the whole view.
+  late final ValueNotifier<Duration> _shownPos;
 
   // Last decoded cover, shown while the next album's art is still decoding
   // so the disc never flashes empty between albums.
   ui.Image? _lastArt;
 
+  final _face = DiscFaceCache();
+
   @override
   void initState() {
     super.initState();
+    _shownPos = ValueNotifier(ref.read(playbackControllerProvider).position);
     _ticker = createTicker(_onTick)..start();
     _fx = AnimationController(vsync: this, duration: _mood.duration);
     // Play the entrance once for whatever is already playing.
@@ -165,6 +175,8 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
     _ticker.dispose();
     _fx.dispose();
     _angle.dispose();
+    _shownPos.dispose();
+    _face.dispose();
     super.dispose();
   }
 
@@ -178,12 +190,21 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
     final playing = ref.read(playbackControllerProvider).isPlaying;
     final target = playing ? _spinSpeed * (_reduceMotion ? 0.35 : 1) : 0.0;
     _speed += (target - _speed) * math.min(1.0, dt * 2.5);
-    // Idle and settled: don't repaint at all (low-power GPUs).
+    // Idle and settled: stop ticking, so a paused disc costs no frames at
+    // all. [_wake] restarts it.
     if (_speed.abs() < 0.002 && target == 0) {
       _speed = 0;
+      _ticker.stop();
       return;
     }
     _angle.value = (_angle.value + _speed * dt) % (2 * math.pi);
+  }
+
+  /// Restarts the spin ticker after it stopped itself at rest.
+  void _wake() {
+    if (_ticker.isActive) return;
+    _lastTick = Duration.zero;
+    _ticker.start();
   }
 
   Future<void> _startAlbumTransition(String? artPath) async {
@@ -197,6 +218,7 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
     _fx.duration = mood.duration;
     // A little kick of extra spin as the new record lands.
     _speed += mood == DiscMood.stark ? -6 : 5;
+    _wake();
     unawaited(_fx.forward(from: 0));
   }
 
@@ -208,10 +230,8 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
   void _scrubStart(DragStartDetails d, Size size) {
     final playback = ref.read(playbackControllerProvider);
     if (playback.currentTrack == null) return;
-    setState(() {
-      _scrubbing = true;
-      _scrubPos = playback.position;
-    });
+    setState(() => _scrubbing = true);
+    _shownPos.value = playback.position;
     _speed = 0;
     _lastPointerAngle = _pointerAngle(d.localPosition, size);
   }
@@ -229,17 +249,16 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
       ref.read(playbackControllerProvider).duration.inMilliseconds,
     );
     final int ms =
-        _scrubPos.inMilliseconds +
+        _shownPos.value.inMilliseconds +
         (delta / (2 * math.pi) * _secondsPerTurn * 1000).round();
-    setState(() {
-      _scrubPos = Duration(milliseconds: ms.clamp(0, maxMs).toInt());
-    });
+    _shownPos.value = Duration(milliseconds: ms.clamp(0, maxMs).toInt());
   }
 
   void _scrubEnd() {
     if (!_scrubbing) return;
-    ref.read(playbackControllerProvider.notifier).seek(_scrubPos);
+    ref.read(playbackControllerProvider.notifier).seek(_shownPos.value);
     setState(() => _scrubbing = false);
+    _wake();
   }
 
   void _wheelScrub(PointerSignalEvent e) {
@@ -283,7 +302,25 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
   @override
   Widget build(BuildContext context) {
     final theme = ref.watch(themeProvider);
-    final playback = ref.watch(playbackControllerProvider);
+    // Rebuild for everything except position, which ticks many times a
+    // second and only reaches the arc and the clock (through _shownPos).
+    // Lists compare by identity, which is right: the controller replaces
+    // them rather than mutating.
+    ref.watch(
+      playbackControllerProvider.select(
+        (s) => (
+          s.currentTrack,
+          s.queue,
+          s.order,
+          s.orderIndex,
+          s.shuffleEnabled,
+          s.repeatMode,
+          s.isPlaying,
+          s.duration,
+        ),
+      ),
+    );
+    final playback = ref.read(playbackControllerProvider);
     final controller = ref.read(playbackControllerProvider.notifier);
     final track = playback.currentTrack;
 
@@ -308,19 +345,24 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
       (prev, next) {
         if (prev != null && next != null && prev != next && !_reduceMotion) {
           _speed += 3;
+          _wake();
         }
       },
     );
+    ref.listen<bool>(
+      playbackControllerProvider.select((s) => s.isPlaying),
+      (_, _) => _wake(),
+    );
+    ref.listen<Duration>(playbackControllerProvider.select((s) => s.position), (
+      _,
+      pos,
+    ) {
+      if (!_scrubbing) _shownPos.value = pos;
+    });
 
     final art = ref.watch(_discArtProvider(track?.albumArtPath));
     final image = art.valueOrNull ?? (art.isLoading ? _lastArt : null);
     if (art.hasValue) _lastArt = art.valueOrNull;
-
-    final shownPos = _scrubbing ? _scrubPos : playback.position;
-    final duration = playback.duration;
-    final progress = duration.inMilliseconds <= 0
-        ? 0.0
-        : (shownPos.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
 
     // What the OLED lists. Normally the play queue, in play order. When the
     // queue is just this one song (e.g. MysticJam resumed it on launch), list
@@ -369,6 +411,12 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
               constraints.maxHeight - keysHeight - panelHeight - chrome,
             )
             .clamp(_minDisc, 420.0);
+        final face = _face.resolve(
+          image,
+          radius: _restRadius(discSize),
+          pixelRatio: MediaQuery.devicePixelRatioOf(context),
+          tint: colors.primary,
+        );
 
         return Container(
           padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
@@ -399,15 +447,15 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
               SizedBox.square(
                 dimension: discSize,
                 child: _Disc(
-                  size: Size.square(discSize),
-                  image: image,
+                  face: face,
+                  hasArt: image != null,
                   angle: _angle,
                   fx: _fx,
                   mood: _mood,
-                  progress: progress,
+                  position: _shownPos,
+                  duration: playback.duration,
                   colors: colors,
                   scrubbing: _scrubbing,
-                  scrubLabel: formatDuration(_scrubPos),
                   enabled: track != null,
                   onTap: controller.togglePlayPause,
                   onPanStart: (d) => _scrubStart(d, Size.square(discSize)),
@@ -438,7 +486,7 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
                   songs: songs,
                   current: current,
                   forceAlbum: browse != null,
-                  shownPosition: shownPos,
+                  position: _shownPos,
                   onPick: pick,
                 ),
               ),
@@ -448,8 +496,7 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
       },
     );
 
-    const needed =
-        _minDisc + _keysHeight + _panelHeight + _chromeHeight + 16;
+    const needed = _minDisc + _keysHeight + _panelHeight + _chromeHeight + 16;
     return LayoutBuilder(
       builder: (context, outer) {
         final fits = outer.maxHeight >= needed;
@@ -628,11 +675,11 @@ class _BrandRow extends StatelessWidget {
     return SizedBox(
       height: _brandHeight,
       child: Row(
-      children: [
-        Text('MYSTICJAM', style: style),
-        const Spacer(),
-        if (format != null) Text(format!.toUpperCase(), style: style),
-      ],
+        children: [
+          Text('MYSTICJAM', style: style),
+          const Spacer(),
+          if (format != null) Text(format!.toUpperCase(), style: style),
+        ],
       ),
     );
   }
@@ -642,16 +689,29 @@ class _BrandRow extends StatelessWidget {
 // Disc
 // ---------------------------------------------------------------------------
 
+/// Disc radius at rest (before the heartbeat pulse) in a [side]-wide box.
+double _restRadius(double side) => side / 2 - 6;
+
+/// Progress through the album entrance, or 1 when none is running.
+double _fxT(AnimationController fx) => fx.isAnimating ? fx.value : 1.0;
+
+/// Heartbeat pulse for soft albums: two beats, then rest.
+double _heartbeat(DiscMood mood, double t) {
+  if (mood != DiscMood.soft || t >= 1) return 1;
+  double beat(double at) => math.exp(-math.pow((t - at) / 0.05, 2));
+  return 1 + 0.04 * beat(0.4) + 0.03 * beat(0.58);
+}
+
 class _Disc extends StatelessWidget {
-  final Size size;
-  final ui.Image? image;
+  final ui.Image? face;
+  final bool hasArt;
   final ValueNotifier<double> angle;
   final AnimationController fx;
   final DiscMood mood;
-  final double progress;
+  final ValueListenable<Duration> position;
+  final Duration duration;
   final AppColorScheme colors;
   final bool scrubbing;
-  final String scrubLabel;
   final bool enabled;
   final VoidCallback onTap;
   final GestureDragStartCallback onPanStart;
@@ -660,15 +720,15 @@ class _Disc extends StatelessWidget {
   final void Function(PointerSignalEvent) onPointerSignal;
 
   const _Disc({
-    required this.size,
-    required this.image,
+    required this.face,
+    required this.hasArt,
     required this.angle,
     required this.fx,
     required this.mood,
-    required this.progress,
+    required this.position,
+    required this.duration,
     required this.colors,
     required this.scrubbing,
-    required this.scrubLabel,
     required this.enabled,
     required this.onTap,
     required this.onPanStart,
@@ -679,6 +739,13 @@ class _Disc extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Three layers, each behind its own repaint boundary, so each repaints
+    // only for what it shows: the spinning face every frame (one textured
+    // draw), the progress overlay on position ticks, the shadow only during
+    // an album entrance.
+    Widget layer(CustomPainter painter) => Positioned.fill(
+      child: RepaintBoundary(child: CustomPaint(painter: painter)),
+    );
     return Semantics(
       label: 'Disc. Tap to play or pause, drag around to scrub.',
       child: MouseRegion(
@@ -695,16 +762,23 @@ class _Disc extends StatelessWidget {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                Positioned.fill(
-                  child: CustomPaint(
-                    painter: _DiscPainter(
-                      image: image,
-                      angle: angle,
-                      fx: fx,
-                      mood: mood,
-                      progress: progress,
-                      colors: colors,
-                    ),
+                layer(_DiscBackPainter(fx: fx, mood: mood, colors: colors)),
+                layer(
+                  _DiscSpinPainter(
+                    face: face,
+                    glitch: hasArt,
+                    angle: angle,
+                    fx: fx,
+                    mood: mood,
+                  ),
+                ),
+                layer(
+                  _DiscFrontPainter(
+                    position: position,
+                    duration: duration,
+                    fx: fx,
+                    mood: mood,
+                    colors: colors,
                   ),
                 ),
                 AnimatedOpacity(
@@ -719,9 +793,12 @@ class _Disc extends StatelessWidget {
                       color: Colors.black.withValues(alpha: 0.6),
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: Text(
-                      scrubLabel,
-                      style: _oledText(24, colors.primary, glow: true),
+                    child: ValueListenableBuilder<Duration>(
+                      valueListenable: position,
+                      builder: (_, pos, _) => Text(
+                        formatDuration(pos),
+                        style: _oledText(24, colors.primary, glow: true),
+                      ),
                     ),
                   ),
                 ),
@@ -734,38 +811,119 @@ class _Disc extends StatelessWidget {
   }
 }
 
-class _DiscPainter extends CustomPainter {
-  final ui.Image? image;
-  final ValueNotifier<double> angle;
+/// The part of the disc that turns — cover (or silver CD), grooves and the
+/// spin marker, clipped to a ring — drawn once into a texture. Spinning is
+/// then a single rotated image draw per frame instead of re-recording ~60
+/// paths, clips and gradients, which is what keeps it smooth at 120 Hz.
+@visibleForTesting
+class DiscFaceCache {
+  ui.Image? _image;
+  Object? _key;
+
+  /// The face for [art] at [radius] logical pixels. Rebuilt only when the
+  /// cover, tint or pixel size bucket changes; sizes are rounded up to a
+  /// 64 px step so dragging a window edge doesn't re-bake every frame (the
+  /// painter scales the slightly larger texture down).
+  ui.Image? resolve(
+    ui.Image? art, {
+    required double radius,
+    required double pixelRatio,
+    required Color tint,
+  }) {
+    if (radius <= 0) return null;
+    final px = ((radius * 2 * pixelRatio / 64).ceil() * 64).clamp(64, 4096);
+    final key = (art, px, art == null ? tint : null);
+    if (key == _key && _image != null) return _image;
+
+    final r = px / 2;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.clipPath(
+      Path()
+        ..fillType = PathFillType.evenOdd
+        ..addOval(Rect.fromCircle(center: Offset(r, r), radius: r))
+        ..addOval(Rect.fromCircle(center: Offset(r, r), radius: r * 0.07)),
+    );
+    canvas.translate(r, r);
+    final dst = Rect.fromCircle(center: Offset.zero, radius: r);
+    if (art != null) {
+      final side = math.min(art.width, art.height).toDouble();
+      final src = Rect.fromCenter(
+        center: Offset(art.width / 2, art.height / 2),
+        width: side,
+        height: side,
+      );
+      canvas.drawImageRect(
+        art,
+        src,
+        dst,
+        Paint()..filterQuality = FilterQuality.medium,
+      );
+    } else {
+      // No cover: a plain silver CD tinted with the theme.
+      canvas.drawRect(
+        dst,
+        Paint()
+          ..shader = SweepGradient(
+            colors: [
+              const Color(0xFFE6E9EE),
+              Color.lerp(const Color(0xFF8A9099), tint, 0.25)!,
+              const Color(0xFFF4F6F8),
+              const Color(0xFF6C727A),
+              const Color(0xFFE6E9EE),
+            ],
+          ).createShader(dst),
+      );
+    }
+
+    // Grooves, spaced 3 logical px apart whatever the texture resolution.
+    final step = 3 * px / (radius * 2);
+    final groove = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = step / 3;
+    for (var rr = r * 0.3; rr < r; rr += step) {
+      groove.color = Colors.black.withValues(
+        alpha: 0.05 + 0.035 * math.sin(rr / step * 3),
+      );
+      canvas.drawCircle(Offset.zero, rr, groove);
+    }
+    // A marker so the spin is visible on symmetric covers.
+    canvas.drawRect(
+      Rect.fromLTWH(-r * 0.008, -r * 0.97, r * 0.016, r * 0.12),
+      Paint()..color = Colors.white.withValues(alpha: 0.85),
+    );
+
+    final picture = recorder.endRecording();
+    // Safe to dispose while a frame still shows it: the engine keeps its own
+    // reference until that frame is gone.
+    _image?.dispose();
+    _image = picture.toImageSync(px, px);
+    picture.dispose();
+    _key = key;
+    return _image;
+  }
+
+  void dispose() {
+    _image?.dispose();
+    _image = null;
+  }
+}
+
+/// Behind the disc: drop shadow, and the burst rings of a vivid entrance.
+class _DiscBackPainter extends CustomPainter {
   final AnimationController fx;
   final DiscMood mood;
-  final double progress;
   final AppColorScheme colors;
 
-  _DiscPainter({
-    required this.image,
-    required this.angle,
-    required this.fx,
-    required this.mood,
-    required this.progress,
-    required this.colors,
-  }) : super(repaint: Listenable.merge([angle, fx]));
+  _DiscBackPainter({required this.fx, required this.mood, required this.colors})
+    : super(repaint: fx);
 
   @override
   void paint(Canvas canvas, Size size) {
     final c = size.center(Offset.zero);
-    final t = fx.isAnimating ? fx.value : 1.0;
+    final t = _fxT(fx);
+    final r = _restRadius(size.shortestSide) * _heartbeat(mood, t);
 
-    // Heartbeat pulse for soft albums: two beats, then rest.
-    var scale = 1.0;
-    if (mood == DiscMood.soft && t < 1) {
-      double beat(double at) => math.exp(-math.pow((t - at) / 0.05, 2));
-      scale = 1 + 0.04 * beat(0.4) + 0.03 * beat(0.58);
-    }
-    final r = (size.shortestSide / 2 - 6) * scale;
-    final hole = r * 0.07;
-
-    // Burst rings behind the disc for vivid albums.
     if (mood == DiscMood.vivid && t < 1) {
       final ringColors = [colors.primary, colors.accent, colors.textPrimary];
       for (var i = 0; i < 3; i++) {
@@ -782,92 +940,116 @@ class _DiscPainter extends CustomPainter {
       }
     }
 
-    // Drop shadow.
     canvas.drawShadow(
       Path()..addOval(Rect.fromCircle(center: c.translate(0, 4), radius: r)),
       Colors.black,
       14,
       false,
     );
+  }
 
-    final discPath = Path()
-      ..fillType = PathFillType.evenOdd
-      ..addOval(Rect.fromCircle(center: c, radius: r))
-      ..addOval(Rect.fromCircle(center: c, radius: hole));
+  @override
+  bool shouldRepaint(_DiscBackPainter old) =>
+      old.mood != mood || old.colors != colors;
+}
 
-    canvas.save();
-    canvas.clipPath(discPath);
-    canvas.translate(c.dx, c.dy);
-    canvas.rotate(angle.value);
+/// The turning face: the cached texture, rotated. Repaints every frame while
+/// spinning, so it does as little as possible.
+class _DiscSpinPainter extends CustomPainter {
+  final ui.Image? face;
+  final bool glitch;
+  final ValueNotifier<double> angle;
+  final AnimationController fx;
+  final DiscMood mood;
 
-    final dst = Rect.fromCircle(center: Offset.zero, radius: r);
-    final img = image;
-    if (img != null) {
-      final side = math.min(img.width, img.height).toDouble();
-      final src = Rect.fromCenter(
-        center: Offset(img.width / 2, img.height / 2),
-        width: side,
-        height: side,
-      );
-      final paint = Paint()..filterQuality = FilterQuality.medium;
-      canvas.drawImageRect(img, src, dst, paint);
+  _DiscSpinPainter({
+    required this.face,
+    required this.glitch,
+    required this.angle,
+    required this.fx,
+    required this.mood,
+  }) : super(repaint: Listenable.merge([angle, fx]));
 
-      // Glitch: RGB split while a stark album lands.
-      if (mood == DiscMood.stark && t < 0.7) {
-        final split = r * 0.05 * (1 - t / 0.7);
-        for (final (color, dx) in [
-          (const Color(0xFFFF0040), split),
-          (const Color(0xFF00E5FF), -split),
-        ]) {
-          canvas.drawImageRect(
-            img,
-            src,
-            dst.shift(Offset(dx, 0)),
-            Paint()
-              ..filterQuality = FilterQuality.low
-              ..colorFilter = ColorFilter.mode(color, BlendMode.modulate)
-              ..blendMode = BlendMode.screen,
-          );
-        }
-      }
-    } else {
-      // No cover: a plain silver CD tinted with the theme.
-      canvas.drawRect(
-        dst,
-        Paint()
-          ..shader = SweepGradient(
-            colors: [
-              const Color(0xFFE6E9EE),
-              Color.lerp(const Color(0xFF8A9099), colors.primary, 0.25)!,
-              const Color(0xFFF4F6F8),
-              const Color(0xFF6C727A),
-              const Color(0xFFE6E9EE),
-            ],
-          ).createShader(dst),
-      );
-    }
-
-    // Grooves.
-    final groove = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    for (var rr = r * 0.3; rr < r; rr += 3) {
-      groove.color = Colors.black.withValues(
-        alpha: 0.05 + 0.035 * math.sin(rr),
-      );
-      canvas.drawCircle(Offset.zero, rr, groove);
-    }
-    // A marker so the spin is visible on symmetric covers.
-    canvas.drawRect(
-      Rect.fromLTWH(-r * 0.008, -r * 0.97, r * 0.016, r * 0.12),
-      Paint()..color = Colors.white.withValues(alpha: 0.85),
+  @override
+  void paint(Canvas canvas, Size size) {
+    final img = face;
+    if (img == null) return;
+    final t = _fxT(fx);
+    final r = _restRadius(size.shortestSide) * _heartbeat(mood, t);
+    final src = Rect.fromLTWH(
+      0,
+      0,
+      img.width.toDouble(),
+      img.height.toDouble(),
     );
-    canvas.restore();
+    final dst = Rect.fromCircle(center: Offset.zero, radius: r);
+
+    canvas.translate(size.width / 2, size.height / 2);
+    canvas.rotate(angle.value);
+    canvas.drawImageRect(
+      img,
+      src,
+      dst,
+      Paint()..filterQuality = FilterQuality.low,
+    );
+
+    // Glitch: RGB split while a stark album lands.
+    if (glitch && mood == DiscMood.stark && t < 0.7) {
+      final split = r * 0.05 * (1 - t / 0.7);
+      for (final (color, dx) in [
+        (const Color(0xFFFF0040), split),
+        (const Color(0xFF00E5FF), -split),
+      ]) {
+        canvas.drawImageRect(
+          img,
+          src,
+          dst.shift(Offset(dx, 0)),
+          Paint()
+            ..filterQuality = FilterQuality.low
+            ..colorFilter = ColorFilter.mode(color, BlendMode.modulate)
+            ..blendMode = BlendMode.screen,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DiscSpinPainter old) =>
+      old.face != face || old.glitch != glitch || old.mood != mood;
+}
+
+/// Fixed on top of the turning face: light sheen, clear hub, rim, and the
+/// progress arc with its hand (12 o'clock is the start of the song).
+class _DiscFrontPainter extends CustomPainter {
+  final ValueListenable<Duration> position;
+  final Duration duration;
+  final AnimationController fx;
+  final DiscMood mood;
+  final AppColorScheme colors;
+
+  _DiscFrontPainter({
+    required this.position,
+    required this.duration,
+    required this.fx,
+    required this.mood,
+    required this.colors,
+  }) : super(repaint: Listenable.merge([position, fx]));
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final r = _restRadius(size.shortestSide) * _heartbeat(mood, _fxT(fx));
+    final hole = r * 0.07;
 
     // Fixed light sheen across the surface (doesn't rotate, so the disc
     // looks like it's turning under a light).
     canvas.save();
-    canvas.clipPath(discPath);
+    canvas.clipPath(
+      Path()
+        ..fillType = PathFillType.evenOdd
+        ..addOval(Rect.fromCircle(center: c, radius: r))
+        ..addOval(Rect.fromCircle(center: c, radius: hole)),
+    );
     canvas.drawRect(
       Rect.fromCircle(center: c, radius: r),
       Paint()
@@ -913,8 +1095,10 @@ class _DiscPainter extends CustomPainter {
         ..color = Colors.black.withValues(alpha: 0.25),
     );
 
-    // Progress arc + hand (the sketch's inner ring and needle). Fixed in
-    // place; 12 o'clock is the start of the song.
+    final ms = duration.inMilliseconds;
+    final progress = ms <= 0
+        ? 0.0
+        : (position.value.inMilliseconds / ms).clamp(0.0, 1.0);
     final pr = r * 0.8;
     final arcRect = Rect.fromCircle(center: c, radius: pr);
     final start = -math.pi / 2;
@@ -931,11 +1115,6 @@ class _DiscPainter extends CustomPainter {
         ..strokeWidth = r * 0.035
         ..color = Colors.black.withValues(alpha: 0.28),
     );
-    final arcPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = r * 0.035
-      ..color = accent;
     if (sweep > 0) {
       canvas.drawArc(
         arcRect,
@@ -949,7 +1128,17 @@ class _DiscPainter extends CustomPainter {
           ..color = accent.withValues(alpha: 0.5)
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
       );
-      canvas.drawArc(arcRect, start, sweep, false, arcPaint);
+      canvas.drawArc(
+        arcRect,
+        start,
+        sweep,
+        false,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = r * 0.035
+          ..color = accent,
+      );
     }
     canvas.drawLine(
       c,
@@ -965,9 +1154,9 @@ class _DiscPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_DiscPainter old) =>
-      old.image != image ||
-      old.progress != progress ||
+  bool shouldRepaint(_DiscFrontPainter old) =>
+      old.position != position ||
+      old.duration != duration ||
       old.mood != mood ||
       old.colors != colors;
 }
@@ -1103,7 +1292,8 @@ class _DeviceKeyState extends State<_DeviceKey> {
       child: Semantics(
         button: true,
         enabled: enabled,
-        toggled: widget.icon == ThemedIconSlot.repeat ||
+        toggled:
+            widget.icon == ThemedIconSlot.repeat ||
                 widget.icon == ThemedIconSlot.repeatOne
             ? widget.lit
             : null,
@@ -1208,7 +1398,7 @@ TextStyle _oledText(
 class _OledPanel extends StatefulWidget {
   final AppTheme theme;
   final PlaybackState playback;
-  final Duration shownPosition;
+  final ValueListenable<Duration> position;
   final List<Track> songs;
 
   /// Index of the playing song within [songs]; -1 if it isn't in the list.
@@ -1219,7 +1409,7 @@ class _OledPanel extends StatefulWidget {
   const _OledPanel({
     required this.theme,
     required this.playback,
-    required this.shownPosition,
+    required this.position,
     required this.songs,
     required this.current,
     required this.forceAlbum,
@@ -1312,12 +1502,6 @@ class _OledPanelState extends State<_OledPanel> {
 
     final cursorIndex = _cursor?.round() ?? math.max(current, 0);
     final dur = pb.duration;
-    final frac = dur.inMilliseconds <= 0
-        ? 0.0
-        : (widget.shownPosition.inMilliseconds / dur.inMilliseconds).clamp(
-            0.0,
-            1.0,
-          );
 
     Widget flag(String label, bool on) => Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -1470,10 +1654,8 @@ class _OledPanelState extends State<_OledPanel> {
                         min: 0,
                         max: (songs.length - 1).toDouble(),
                         divisions: songs.length - 1,
-                        value: (_cursor ?? math.max(current, 0).toDouble()).clamp(
-                          0.0,
-                          (songs.length - 1).toDouble(),
-                        ),
+                        value: (_cursor ?? math.max(current, 0).toDouble())
+                            .clamp(0.0, (songs.length - 1).toDouble()),
                         semanticFormatterCallback: (v) =>
                             songs[v.round()].title,
                         onChanged: (v) {
@@ -1489,31 +1671,44 @@ class _OledPanelState extends State<_OledPanel> {
                       ),
                     ),
                   ),
-                Row(
-                  children: [
-                    Text(
-                      formatDuration(widget.shownPosition),
-                      style: _oledText(13, pix, glow: true),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Container(
-                        height: 5,
-                        color: Colors.white.withValues(alpha: 0.08),
-                        alignment: Alignment.centerLeft,
-                        child: FractionallySizedBox(
-                          widthFactor: frac,
-                          heightFactor: 1,
-                          child: ColoredBox(color: pix),
+                // The only part of the panel that follows the position, so
+                // it alone rebuilds on each tick.
+                ValueListenableBuilder<Duration>(
+                  valueListenable: widget.position,
+                  builder: (context, pos, _) {
+                    final frac = dur.inMilliseconds <= 0
+                        ? 0.0
+                        : (pos.inMilliseconds / dur.inMilliseconds).clamp(
+                            0.0,
+                            1.0,
+                          );
+                    return Row(
+                      children: [
+                        Text(
+                          formatDuration(pos),
+                          style: _oledText(13, pix, glow: true),
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      formatDuration(dur),
-                      style: _oledText(13, pix, glow: true),
-                    ),
-                  ],
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Container(
+                            height: 5,
+                            color: Colors.white.withValues(alpha: 0.08),
+                            alignment: Alignment.centerLeft,
+                            child: FractionallySizedBox(
+                              widthFactor: frac,
+                              heightFactor: 1,
+                              child: ColoredBox(color: pix),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          formatDuration(dur),
+                          style: _oledText(13, pix, glow: true),
+                        ),
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 6),
                 Row(
@@ -1534,7 +1729,9 @@ class _OledPanelState extends State<_OledPanel> {
           ),
           // Scanlines.
           const Positioned.fill(
-            child: IgnorePointer(child: CustomPaint(painter: _ScanlinePainter())),
+            child: IgnorePointer(
+              child: CustomPaint(painter: _ScanlinePainter()),
+            ),
           ),
         ],
       ),
