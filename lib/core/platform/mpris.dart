@@ -148,18 +148,18 @@ class MprisObject extends DBusObject {
   }
 
   @override
-  Future<DBusMethodResponse> handleMethodCall(DBusMethodCall call) async {
+  Future<DBusMethodResponse> handleMethodCall(DBusMethodCall methodCall) async {
     final c = _controller();
     final s = _state();
-    if (call.interface == _rootIface) {
-      return call.name == 'Raise' || call.name == 'Quit'
+    if (methodCall.interface == _rootIface) {
+      return methodCall.name == 'Raise' || methodCall.name == 'Quit'
           ? DBusMethodSuccessResponse()
           : DBusMethodErrorResponse.unknownMethod();
     }
-    if (call.interface != _playerIface) {
+    if (methodCall.interface != _playerIface) {
       return DBusMethodErrorResponse.unknownInterface();
     }
-    switch (call.name) {
+    switch (methodCall.name) {
       case 'Next':
         await c.next();
       case 'Previous':
@@ -175,14 +175,15 @@ class MprisObject extends DBusObject {
         if (s.currentTrack != null) await c.seek(Duration.zero);
       case 'Seek':
         final target =
-            s.position + Duration(microseconds: call.values[0].asInt64());
+            s.position + Duration(microseconds: methodCall.values[0].asInt64());
         await c.seek(_clamp(target, s.duration));
       case 'SetPosition':
         final id = s.currentTrack?.id;
-        if (id != null && call.values[0].asObjectPath() == trackPath(id)) {
+        if (id != null &&
+            methodCall.values[0].asObjectPath() == trackPath(id)) {
           await c.seek(
             _clamp(
-              Duration(microseconds: call.values[1].asInt64()),
+              Duration(microseconds: methodCall.values[1].asInt64()),
               s.duration,
             ),
           );

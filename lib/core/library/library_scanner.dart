@@ -278,6 +278,9 @@ class LibraryScanner {
 
     Future<void> flushBatch() async {
       if (batch.isEmpty) return;
+      // Directory listing order is filesystem-dependent; sorting makes
+      // "first-seen wins" (album title casing, cover art) deterministic.
+      batch.sort();
       await repository.db.transaction(() async {
         for (final path in batch) {
           // Checked per-file, not just once per batch: onProgress (where a
