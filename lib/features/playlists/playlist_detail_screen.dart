@@ -19,7 +19,8 @@ class PlaylistDetailScreen extends ConsumerStatefulWidget {
   const PlaylistDetailScreen({super.key, required this.playlist});
 
   @override
-  ConsumerState<PlaylistDetailScreen> createState() => _PlaylistDetailScreenState();
+  ConsumerState<PlaylistDetailScreen> createState() =>
+      _PlaylistDetailScreenState();
 }
 
 class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
@@ -29,7 +30,11 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
     if (_query.isEmpty) return tracks;
     final q = _query.toLowerCase();
     return tracks
-        .where((t) => t.title.toLowerCase().contains(q) || (t.artist?.toLowerCase().contains(q) ?? false))
+        .where(
+          (t) =>
+              t.title.toLowerCase().contains(q) ||
+              (t.artist?.toLowerCase().contains(q) ?? false),
+        )
         .toList();
   }
 
@@ -40,9 +45,9 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
     final controller = ref.read(playbackControllerProvider.notifier);
     controller.playFromQueue(fullQueue, fullIndex);
     controller.refreshVolume();
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const NowPlayingScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const NowPlayingScreen()));
   }
 
   // onReorderItem (unlike the older, now-deprecated onReorder) already
@@ -51,7 +56,9 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
     final ids = tracks.map((t) => t.id).toList();
     final movedId = ids.removeAt(oldIndex);
     ids.insert(newIndex, movedId);
-    ref.read(libraryRepositoryProvider).setPlaylistTrackOrder(widget.playlist.id, ids);
+    ref
+        .read(libraryRepositoryProvider)
+        .setPlaylistTrackOrder(widget.playlist.id, ids);
   }
 
   Widget _trackTile(BuildContext context, Track track, List<Track> fullQueue) {
@@ -64,13 +71,20 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
         track: track,
         position: details.globalPosition,
         onPlay: () => _playTrack(fullQueue, track),
-        onRemoveFromPlaylist: () =>
-            ref.read(libraryRepositoryProvider).removeTrackFromPlaylist(widget.playlist.id, track.id),
+        onRemoveFromPlaylist: () => ref
+            .read(libraryRepositoryProvider)
+            .removeTrackFromPlaylist(widget.playlist.id, track.id),
       ),
       child: ListTile(
-        title: Text(track.title, style: TextStyle(color: theme.colors.textPrimary)),
+        title: Text(
+          track.title,
+          style: TextStyle(color: theme.colors.textPrimary),
+        ),
         subtitle: track.artist != null
-            ? Text(track.artist!, style: TextStyle(color: theme.colors.textSecondary))
+            ? Text(
+                track.artist!,
+                style: TextStyle(color: theme.colors.textSecondary),
+              )
             : null,
         onTap: () => _playTrack(fullQueue, track),
         trailing: Row(
@@ -79,14 +93,21 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
             if (track.durationMs != null) ...[
               Text(
                 formatDuration(Duration(milliseconds: track.durationMs!)),
-                style: TextStyle(color: theme.colors.textSecondary, fontSize: 11),
+                style: TextStyle(
+                  color: theme.colors.textSecondary,
+                  fontSize: 11,
+                ),
               ),
               const SizedBox(width: 8),
             ],
             IconButton(
-              icon: ThemedIcon(ThemedIconSlot.removeFromPlaylist, color: theme.colors.textSecondary),
-              onPressed: () =>
-                  ref.read(libraryRepositoryProvider).removeTrackFromPlaylist(widget.playlist.id, track.id),
+              icon: ThemedIcon(
+                ThemedIconSlot.removeFromPlaylist,
+                color: theme.colors.textSecondary,
+              ),
+              onPressed: () => ref
+                  .read(libraryRepositoryProvider)
+                  .removeTrackFromPlaylist(widget.playlist.id, track.id),
             ),
           ],
         ),
@@ -101,13 +122,19 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.playlist.name, style: TextStyle(color: theme.colors.textPrimary)),
+        title: Text(
+          widget.playlist.name,
+          style: TextStyle(color: theme.colors.textPrimary),
+        ),
         actions: [
           IconButton(
             tooltip: 'Add Songs',
             icon: const ThemedIcon(ThemedIconSlot.playlistAdd),
             onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => AddTracksToPlaylistScreen(playlist: widget.playlist)),
+              MaterialPageRoute(
+                builder: (_) =>
+                    AddTracksToPlaylistScreen(playlist: widget.playlist),
+              ),
             ),
           ),
         ],
@@ -136,35 +163,44 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                     alignment: Alignment.centerLeft,
                     child: Text(
                       'Drag to reorder',
-                      style: TextStyle(color: theme.colors.textSecondary, fontSize: 11),
+                      style: TextStyle(
+                        color: theme.colors.textSecondary,
+                        fontSize: 11,
+                      ),
                     ),
                   ),
                 ),
               Expanded(
                 child: tracks.isEmpty
                     ? Center(
-                        child: Text('No tracks in this playlist yet',
-                            style: TextStyle(color: theme.colors.textSecondary)),
+                        child: Text(
+                          'No tracks in this playlist yet',
+                          style: TextStyle(color: theme.colors.textSecondary),
+                        ),
                       )
                     : filtered.isEmpty
-                        ? Center(
-                            child: Text('No matches', style: TextStyle(color: theme.colors.textSecondary)),
-                          )
-                        // Reordering only makes sense against the full,
-                        // unfiltered playlist order — fall back to a plain
-                        // list while a search is active.
-                        : isFiltering
-                            ? ListView.builder(
-                                itemCount: filtered.length,
-                                itemBuilder: (context, index) =>
-                                    _trackTile(context, filtered[index], tracks),
-                              )
-                            : ReorderableListView.builder(
-                                itemCount: tracks.length,
-                                onReorderItem: (oldIndex, newIndex) => _reorder(tracks, oldIndex, newIndex),
-                                itemBuilder: (context, index) =>
-                                    _trackTile(context, tracks[index], tracks),
-                              ),
+                    ? Center(
+                        child: Text(
+                          'No matches',
+                          style: TextStyle(color: theme.colors.textSecondary),
+                        ),
+                      )
+                    // Reordering only makes sense against the full,
+                    // unfiltered playlist order — fall back to a plain
+                    // list while a search is active.
+                    : isFiltering
+                    ? ListView.builder(
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) =>
+                            _trackTile(context, filtered[index], tracks),
+                      )
+                    : ReorderableListView.builder(
+                        itemCount: tracks.length,
+                        onReorderItem: (oldIndex, newIndex) =>
+                            _reorder(tracks, oldIndex, newIndex),
+                        itemBuilder: (context, index) =>
+                            _trackTile(context, tracks[index], tracks),
+                      ),
               ),
             ],
           );

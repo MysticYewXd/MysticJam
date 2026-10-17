@@ -24,7 +24,10 @@ class QueueScreen extends ConsumerWidget {
       ),
       body: playback.order.isEmpty
           ? Center(
-              child: Text('Nothing queued', style: TextStyle(color: theme.colors.textSecondary)),
+              child: Text(
+                'Nothing queued',
+                style: TextStyle(color: theme.colors.textSecondary),
+              ),
             )
           : ReorderableListView.builder(
               itemCount: playback.order.length,
@@ -42,16 +45,25 @@ class QueueScreen extends ConsumerWidget {
                   title: Text(
                     track.title,
                     style: TextStyle(
-                      color: isCurrent ? theme.colors.primary : theme.colors.textPrimary,
-                      fontWeight: isCurrent ? FontWeight.w600 : FontWeight.normal,
+                      color: isCurrent
+                          ? theme.colors.primary
+                          : theme.colors.textPrimary,
+                      fontWeight: isCurrent
+                          ? FontWeight.w600
+                          : FontWeight.normal,
                     ),
                   ),
                   subtitle: track.artist != null
-                      ? Text(track.artist!, style: TextStyle(color: theme.colors.textSecondary))
+                      ? Text(
+                          track.artist!,
+                          style: TextStyle(color: theme.colors.textSecondary),
+                        )
                       : null,
                   trailing: isCurrent
                       ? ThemedIcon(
-                          playback.isPlaying ? ThemedIconSlot.pause : ThemedIconSlot.play,
+                          playback.isPlaying
+                              ? ThemedIconSlot.pause
+                              : ThemedIconSlot.play,
                           color: theme.colors.primary,
                           size: 18,
                         )

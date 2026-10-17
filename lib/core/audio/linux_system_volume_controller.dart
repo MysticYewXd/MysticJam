@@ -30,7 +30,11 @@ class LinuxSystemVolumeController implements SystemVolumeController {
   Future<void> setVolume(double volume) async {
     final clamped = volume.clamp(0.0, 1.0);
     try {
-      await Process.run('wpctl', ['set-volume', _sink, clamped.toStringAsFixed(2)]);
+      await Process.run('wpctl', [
+        'set-volume',
+        _sink,
+        clamped.toStringAsFixed(2),
+      ]);
     } catch (_) {
       // wpctl unavailable on this system; fail quietly rather than crash playback UI.
     }

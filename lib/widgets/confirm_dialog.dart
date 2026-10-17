@@ -25,7 +25,10 @@ Future<bool> confirmDestructiveAction(
         ),
         TextButton(
           onPressed: () => Navigator.pop(ctx, true),
-          child: Text(confirmLabel, style: TextStyle(color: theme.colors.error)),
+          child: Text(
+            confirmLabel,
+            style: TextStyle(color: theme.colors.error),
+          ),
         ),
       ],
     ),

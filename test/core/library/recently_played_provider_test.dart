@@ -105,11 +105,9 @@ void main() {
       await nextUpdate;
 
       final result = container.read(recentlyPlayedTracksProvider);
-      expect(
-        result.value?.map((t) => t.id).toList(),
-        [id2],
-        reason: 'the deleted track must not still appear',
-      );
+      expect(result.value?.map((t) => t.id).toList(), [
+        id2,
+      ], reason: 'the deleted track must not still appear');
     },
   );
 }

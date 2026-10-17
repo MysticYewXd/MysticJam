@@ -18,7 +18,8 @@ class AndroidSystemVolumeController implements SystemVolumeController {
   Future<double> getVolume() => VolumeController.instance.getVolume();
 
   @override
-  Future<void> setVolume(double volume) => VolumeController.instance.setVolume(volume.clamp(0.0, 1.0));
+  Future<void> setVolume(double volume) =>
+      VolumeController.instance.setVolume(volume.clamp(0.0, 1.0));
 
   @override
   Stream<double> get volumeChanges {

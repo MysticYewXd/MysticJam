@@ -31,7 +31,8 @@ class MediaKitAudioEngine implements AudioEngine {
   Future<void> seek(Duration position) => _player.seek(position);
 
   @override
-  Future<void> setVolume(double volume) => _player.setVolume(volume.clamp(0.0, 1.0) * 100);
+  Future<void> setVolume(double volume) =>
+      _player.setVolume(volume.clamp(0.0, 1.0) * 100);
 
   @override
   Future<void> dispose() => _player.dispose();
@@ -52,5 +53,6 @@ class MediaKitAudioEngine implements AudioEngine {
   Stream<String> get errorStream => _player.stream.error;
 
   @override
-  Stream<double> get volumeStream => _player.stream.volume.map((v) => (v / 100).clamp(0.0, 1.0));
+  Stream<double> get volumeStream =>
+      _player.stream.volume.map((v) => (v / 100).clamp(0.0, 1.0));
 }

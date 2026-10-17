@@ -66,12 +66,16 @@ class _FakeSystemVolumeController implements SystemVolumeController {
 }
 
 void main() {
-  testWidgets('App builds and shows the library screen', (WidgetTester tester) async {
+  testWidgets('App builds and shows the library screen', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           audioEngineProvider.overrideWithValue(_FakeAudioEngine()),
-          systemVolumeControllerProvider.overrideWithValue(_FakeSystemVolumeController()),
+          systemVolumeControllerProvider.overrideWithValue(
+            _FakeSystemVolumeController(),
+          ),
         ],
         child: const MusicPlayerApp(),
       ),

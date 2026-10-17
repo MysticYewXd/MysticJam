@@ -34,7 +34,10 @@ class ThemedSearchBar extends ConsumerWidget {
           contentPadding: const EdgeInsets.symmetric(vertical: 14),
           hintText: hintText,
           hintStyle: TextStyle(color: theme.colors.textSecondary),
-          prefixIcon: ThemedIcon(ThemedIconSlot.search, color: theme.colors.textSecondary),
+          prefixIcon: ThemedIcon(
+            ThemedIconSlot.search,
+            color: theme.colors.textSecondary,
+          ),
         ),
       ),
     );

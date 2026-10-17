@@ -18,10 +18,12 @@ class AddTracksToPlaylistScreen extends ConsumerStatefulWidget {
   const AddTracksToPlaylistScreen({super.key, required this.playlist});
 
   @override
-  ConsumerState<AddTracksToPlaylistScreen> createState() => _AddTracksToPlaylistScreenState();
+  ConsumerState<AddTracksToPlaylistScreen> createState() =>
+      _AddTracksToPlaylistScreenState();
 }
 
-class _AddTracksToPlaylistScreenState extends ConsumerState<AddTracksToPlaylistScreen> {
+class _AddTracksToPlaylistScreenState
+    extends ConsumerState<AddTracksToPlaylistScreen> {
   String _query = '';
   bool _scanning = false;
   final Set<int> _selectedTrackIds = {};
@@ -30,7 +32,11 @@ class _AddTracksToPlaylistScreenState extends ConsumerState<AddTracksToPlaylistS
     if (_query.isEmpty) return tracks;
     final q = _query.toLowerCase();
     return tracks
-        .where((t) => t.title.toLowerCase().contains(q) || (t.artist?.toLowerCase().contains(q) ?? false))
+        .where(
+          (t) =>
+              t.title.toLowerCase().contains(q) ||
+              (t.artist?.toLowerCase().contains(q) ?? false),
+        )
         .toList();
   }
 
@@ -38,7 +44,10 @@ class _AddTracksToPlaylistScreenState extends ConsumerState<AddTracksToPlaylistS
   /// — whether they were brand-new to the library or already indexed
   /// elsewhere. This is the whole point of scanning from inside a playlist
   /// instead of the Library screen: no separate find-and-checkbox step after.
-  Future<void> _addScannedPathsToPlaylist(List<String> paths, {required int addedCount}) async {
+  Future<void> _addScannedPathsToPlaylist(
+    List<String> paths, {
+    required int addedCount,
+  }) async {
     if (paths.isEmpty) return;
     final repo = ref.read(libraryRepositoryProvider);
     final trackIds = await repo.getTrackIdsForPaths(paths);
@@ -67,7 +76,10 @@ class _AddTracksToPlaylistScreenState extends ConsumerState<AddTracksToPlaylistS
     try {
       final scanner = ref.read(libraryScannerProvider);
       final result = await scanner.scanDirectory(path);
-      await _addScannedPathsToPlaylist(result.allPaths, addedCount: result.addedCount);
+      await _addScannedPathsToPlaylist(
+        result.allPaths,
+        addedCount: result.addedCount,
+      );
     } finally {
       if (mounted) setState(() => _scanning = false);
     }
@@ -91,7 +103,10 @@ class _AddTracksToPlaylistScreenState extends ConsumerState<AddTracksToPlaylistS
     try {
       final scanner = ref.read(libraryScannerProvider);
       final result = await scanner.scanFiles(paths);
-      await _addScannedPathsToPlaylist(result.allPaths, addedCount: result.addedCount);
+      await _addScannedPathsToPlaylist(
+        result.allPaths,
+        addedCount: result.addedCount,
+      );
     } finally {
       if (mounted) setState(() => _scanning = false);
     }
@@ -130,7 +145,10 @@ class _AddTracksToPlaylistScreenState extends ConsumerState<AddTracksToPlaylistS
                 ? SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: theme.colors.textPrimary),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: theme.colors.textPrimary,
+                    ),
                   )
                 : const ThemedIcon(ThemedIconSlot.folderAdd),
             onPressed: _scanning ? null : _pickAndScanFolder,
@@ -140,7 +158,9 @@ class _AddTracksToPlaylistScreenState extends ConsumerState<AddTracksToPlaylistS
             child: Text(
               'Add',
               style: TextStyle(
-                color: _selectedTrackIds.isEmpty ? theme.colors.controlInactive : theme.colors.primary,
+                color: _selectedTrackIds.isEmpty
+                    ? theme.colors.controlInactive
+                    : theme.colors.primary,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -151,7 +171,10 @@ class _AddTracksToPlaylistScreenState extends ConsumerState<AddTracksToPlaylistS
         data: (allTracks) {
           if (allTracks.isEmpty) {
             return Center(
-              child: Text('No tracks in your library yet', style: TextStyle(color: theme.colors.textSecondary)),
+              child: Text(
+                'No tracks in your library yet',
+                style: TextStyle(color: theme.colors.textSecondary),
+              ),
             );
           }
           final filtered = _filter(allTracks);
@@ -167,7 +190,10 @@ class _AddTracksToPlaylistScreenState extends ConsumerState<AddTracksToPlaylistS
               Expanded(
                 child: filtered.isEmpty
                     ? Center(
-                        child: Text('No matches', style: TextStyle(color: theme.colors.textSecondary)),
+                        child: Text(
+                          'No matches',
+                          style: TextStyle(color: theme.colors.textSecondary),
+                        ),
                       )
                     : ListView.builder(
                         itemCount: filtered.length,
@@ -182,9 +208,17 @@ class _AddTracksToPlaylistScreenState extends ConsumerState<AddTracksToPlaylistS
                                 _selectedTrackIds.remove(track.id);
                               }
                             }),
-                            title: Text(track.title, style: TextStyle(color: theme.colors.textPrimary)),
+                            title: Text(
+                              track.title,
+                              style: TextStyle(color: theme.colors.textPrimary),
+                            ),
                             subtitle: track.artist != null
-                                ? Text(track.artist!, style: TextStyle(color: theme.colors.textSecondary))
+                                ? Text(
+                                    track.artist!,
+                                    style: TextStyle(
+                                      color: theme.colors.textSecondary,
+                                    ),
+                                  )
                                 : null,
                           );
                         },

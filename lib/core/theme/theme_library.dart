@@ -20,10 +20,15 @@ class ThemeLibraryState {
 
   const ThemeLibraryState({this.savedThemes = const [], this.activeThemeId});
 
-  ThemeLibraryState copyWith({List<CustomThemeData>? savedThemes, String? Function()? activeThemeId}) {
+  ThemeLibraryState copyWith({
+    List<CustomThemeData>? savedThemes,
+    String? Function()? activeThemeId,
+  }) {
     return ThemeLibraryState(
       savedThemes: savedThemes ?? this.savedThemes,
-      activeThemeId: activeThemeId != null ? activeThemeId() : this.activeThemeId,
+      activeThemeId: activeThemeId != null
+          ? activeThemeId()
+          : this.activeThemeId,
     );
   }
 }
@@ -52,7 +57,8 @@ class ThemeLibraryNotifier extends Notifier<ThemeLibraryState> {
       final file = await _themeFile();
       if (!await file.exists()) return;
       final raw = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
-      final themesJson = (raw['savedThemes'] as List).cast<Map<String, dynamic>>();
+      final themesJson = (raw['savedThemes'] as List)
+          .cast<Map<String, dynamic>>();
       state = ThemeLibraryState(
         savedThemes: themesJson.map(CustomThemeData.fromJson).toList(),
         activeThemeId: raw['activeThemeId'] as String?,
@@ -113,7 +119,8 @@ class ThemeLibraryNotifier extends Notifier<ThemeLibraryState> {
   Future<void> deleteTheme(String id) async {
     state = state.copyWith(
       savedThemes: state.savedThemes.where((t) => t.id != id).toList(),
-      activeThemeId: () => state.activeThemeId == id ? null : state.activeThemeId,
+      activeThemeId: () =>
+          state.activeThemeId == id ? null : state.activeThemeId,
     );
     await _persist();
   }
@@ -125,9 +132,10 @@ class ThemeLibraryNotifier extends Notifier<ThemeLibraryState> {
   }
 }
 
-final themeLibraryProvider = NotifierProvider<ThemeLibraryNotifier, ThemeLibraryState>(
-  ThemeLibraryNotifier.new,
-);
+final themeLibraryProvider =
+    NotifierProvider<ThemeLibraryNotifier, ThemeLibraryState>(
+      ThemeLibraryNotifier.new,
+    );
 
 /// The currently active custom theme's colors/typography/shapes merged onto
 /// [defaultTheme] — icons/layout/animations/assets always come from the

@@ -19,7 +19,11 @@ import 'theme_detail_editor_screen.dart';
 class ThemeEditorScreen extends ConsumerWidget {
   const ThemeEditorScreen({super.key});
 
-  Future<void> _editPreset(BuildContext context, WidgetRef ref, CustomThemeData preset) async {
+  Future<void> _editPreset(
+    BuildContext context,
+    WidgetRef ref,
+    CustomThemeData preset,
+  ) async {
     final draft = CustomThemeData(
       id: 'draft',
       name: '${preset.name} copy',
@@ -28,22 +32,31 @@ class ThemeEditorScreen extends ConsumerWidget {
       shapes: preset.shapes,
     );
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ThemeDetailEditorScreen(draft: draft, isNew: true)),
+      MaterialPageRoute(
+        builder: (_) => ThemeDetailEditorScreen(draft: draft, isNew: true),
+      ),
     );
   }
 
   Future<void> _editSaved(BuildContext context, CustomThemeData saved) async {
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ThemeDetailEditorScreen(draft: saved, isNew: false)),
+      MaterialPageRoute(
+        builder: (_) => ThemeDetailEditorScreen(draft: saved, isNew: false),
+      ),
     );
   }
 
-  Future<void> _deleteSaved(BuildContext context, WidgetRef ref, CustomThemeData saved) async {
+  Future<void> _deleteSaved(
+    BuildContext context,
+    WidgetRef ref,
+    CustomThemeData saved,
+  ) async {
     final confirmed = await confirmDestructiveAction(
       context,
       ref,
       title: 'Delete Theme?',
-      message: '"${saved.name}" will be deleted. If it\'s the active theme, the app reverts to Default.',
+      message:
+          '"${saved.name}" will be deleted. If it\'s the active theme, the app reverts to Default.',
     );
     if (confirmed) {
       await ref.read(themeLibraryProvider.notifier).deleteTheme(saved.id);
@@ -59,15 +72,25 @@ class ThemeEditorScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: theme.colors.background,
       appBar: AppBar(
-        title: Text('Themes', style: TextStyle(color: theme.colors.textPrimary)),
+        title: Text(
+          'Themes',
+          style: TextStyle(color: theme.colors.textPrimary),
+        ),
         actions: [
           IconButton(
             tooltip: 'New Theme',
             icon: Icon(Icons.add, color: theme.colors.textPrimary),
             onPressed: () async {
-              final draft = CustomThemeData.fromAppTheme('draft', 'My Theme', theme);
+              final draft = CustomThemeData.fromAppTheme(
+                'draft',
+                'My Theme',
+                theme,
+              );
               await Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => ThemeDetailEditorScreen(draft: draft, isNew: true)),
+                MaterialPageRoute(
+                  builder: (_) =>
+                      ThemeDetailEditorScreen(draft: draft, isNew: true),
+                ),
               );
             },
           ),
@@ -170,15 +193,24 @@ class _ThemeRow extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (selected) Icon(Icons.check_circle, color: theme.colors.primary, size: 20),
+          if (selected)
+            Icon(Icons.check_circle, color: theme.colors.primary, size: 20),
           if (onEdit != null)
             IconButton(
-              icon: Icon(Icons.edit_outlined, color: theme.colors.textSecondary, size: 20),
+              icon: Icon(
+                Icons.edit_outlined,
+                color: theme.colors.textSecondary,
+                size: 20,
+              ),
               onPressed: onEdit,
             ),
           if (onDelete != null)
             IconButton(
-              icon: Icon(Icons.delete_outline, color: theme.colors.error, size: 20),
+              icon: Icon(
+                Icons.delete_outline,
+                color: theme.colors.error,
+                size: 20,
+              ),
               onPressed: onDelete,
             ),
         ],

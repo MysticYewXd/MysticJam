@@ -15,9 +15,7 @@ void main() async {
 
   runApp(
     ProviderScope(
-      overrides: [
-        audioEngineProvider.overrideWithValue(audioEngine),
-      ],
+      overrides: [audioEngineProvider.overrideWithValue(audioEngine)],
       child: const MusicPlayerApp(),
     ),
   );

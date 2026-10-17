@@ -16,7 +16,11 @@ class ThemedVolumeSlider extends ConsumerStatefulWidget {
   final double value;
   final ValueChanged<double> onChangeEnd;
 
-  const ThemedVolumeSlider({super.key, required this.value, required this.onChangeEnd});
+  const ThemedVolumeSlider({
+    super.key,
+    required this.value,
+    required this.onChangeEnd,
+  });
 
   @override
   ConsumerState<ThemedVolumeSlider> createState() => _ThemedVolumeSliderState();
@@ -32,7 +36,11 @@ class _ThemedVolumeSliderState extends ConsumerState<ThemedVolumeSlider> {
 
     return Row(
       children: [
-        ThemedIcon(ThemedIconSlot.volumeDown, size: 18, color: theme.colors.textSecondary),
+        ThemedIcon(
+          ThemedIconSlot.volumeDown,
+          size: 18,
+          color: theme.colors.textSecondary,
+        ),
         Expanded(
           child: SliderTheme(
             data: SliderThemeData(
@@ -53,7 +61,11 @@ class _ThemedVolumeSliderState extends ConsumerState<ThemedVolumeSlider> {
             ),
           ),
         ),
-        ThemedIcon(ThemedIconSlot.volumeUp, size: 18, color: theme.colors.textSecondary),
+        ThemedIcon(
+          ThemedIconSlot.volumeUp,
+          size: 18,
+          color: theme.colors.textSecondary,
+        ),
       ],
     );
   }

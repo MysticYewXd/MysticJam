@@ -45,16 +45,25 @@ class ColorField extends StatelessWidget {
               decoration: BoxDecoration(
                 color: value,
                 shape: BoxShape.circle,
-                border: Border.all(color: theme.colors.textSecondary.withValues(alpha: 0.4)),
+                border: Border.all(
+                  color: theme.colors.textSecondary.withValues(alpha: 0.4),
+                ),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(label, style: TextStyle(color: theme.colors.textPrimary)),
+              child: Text(
+                label,
+                style: TextStyle(color: theme.colors.textPrimary),
+              ),
             ),
             Text(
               '#${value.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}',
-              style: TextStyle(color: theme.colors.textSecondary, fontSize: 12, fontFamily: 'monospace'),
+              style: TextStyle(
+                color: theme.colors.textSecondary,
+                fontSize: 12,
+                fontFamily: 'monospace',
+              ),
             ),
           ],
         ),
@@ -96,8 +105,12 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
 
   Color get _current => Color.fromARGB(255, _r.round(), _g.round(), _b.round());
 
-  String _currentHex() =>
-      _current.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
+  String _currentHex() => _current
+      .toARGB32()
+      .toRadixString(16)
+      .padLeft(8, '0')
+      .substring(2)
+      .toUpperCase();
 
   void _applyHex(String input) {
     final cleaned = input.replaceFirst('#', '').trim();
@@ -116,7 +129,10 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
     final theme = widget.theme;
     return AlertDialog(
       backgroundColor: theme.colors.surface,
-      title: Text('Pick a color', style: TextStyle(color: theme.colors.textPrimary)),
+      title: Text(
+        'Pick a color',
+        style: TextStyle(color: theme.colors.textPrimary),
+      ),
       content: SizedBox(
         width: 320,
         child: Column(
@@ -127,13 +143,18 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
               decoration: BoxDecoration(
                 color: _current,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: theme.colors.textSecondary.withValues(alpha: 0.3)),
+                border: Border.all(
+                  color: theme.colors.textSecondary.withValues(alpha: 0.3),
+                ),
               ),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _hexController,
-              style: TextStyle(color: theme.colors.textPrimary, fontFamily: 'monospace'),
+              style: TextStyle(
+                color: theme.colors.textPrimary,
+                fontFamily: 'monospace',
+              ),
               decoration: InputDecoration(
                 prefixText: '#',
                 labelText: 'Hex',
@@ -144,23 +165,38 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
               },
             ),
             const SizedBox(height: 8),
-            _slider('R', _r, (v) => setState(() {
-                  _r = v;
-                  _hexController.text = _currentHex();
-                })),
-            _slider('G', _g, (v) => setState(() {
-                  _g = v;
-                  _hexController.text = _currentHex();
-                })),
-            _slider('B', _b, (v) => setState(() {
-                  _b = v;
-                  _hexController.text = _currentHex();
-                })),
+            _slider(
+              'R',
+              _r,
+              (v) => setState(() {
+                _r = v;
+                _hexController.text = _currentHex();
+              }),
+            ),
+            _slider(
+              'G',
+              _g,
+              (v) => setState(() {
+                _g = v;
+                _hexController.text = _currentHex();
+              }),
+            ),
+            _slider(
+              'B',
+              _b,
+              (v) => setState(() {
+                _b = v;
+                _hexController.text = _currentHex();
+              }),
+            ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         TextButton(
           onPressed: () => Navigator.pop(context, _current),
           child: const Text('Use color'),
@@ -172,7 +208,13 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
   Widget _slider(String label, double value, ValueChanged<double> onChanged) {
     return Row(
       children: [
-        SizedBox(width: 16, child: Text(label, style: TextStyle(color: widget.theme.colors.textSecondary))),
+        SizedBox(
+          width: 16,
+          child: Text(
+            label,
+            style: TextStyle(color: widget.theme.colors.textSecondary),
+          ),
+        ),
         Expanded(
           child: Slider(
             value: value,
@@ -182,7 +224,13 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
             onChanged: onChanged,
           ),
         ),
-        SizedBox(width: 32, child: Text(value.round().toString(), style: TextStyle(color: widget.theme.colors.textSecondary))),
+        SizedBox(
+          width: 32,
+          child: Text(
+            value.round().toString(),
+            style: TextStyle(color: widget.theme.colors.textSecondary),
+          ),
+        ),
       ],
     );
   }
