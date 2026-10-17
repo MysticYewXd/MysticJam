@@ -1,5 +1,7 @@
 package com.musicplayer.music_player
 
-import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 
-class MainActivity : FlutterActivity()
+// AudioServiceActivity shares its FlutterEngine with audio_service's
+// background service, so playback survives the activity being destroyed.
+class MainActivity : AudioServiceActivity()

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/audio/format_support.dart';
 import '../../core/library/database.dart';
 import '../../core/library/library_providers.dart';
+import '../../core/platform/music_permission.dart';
 import '../../core/theme/theme_provider.dart';
 import '../../widgets/themed/themed_icon.dart';
 import '../../widgets/themed/themed_search_bar.dart';
@@ -65,6 +66,7 @@ class _AddTracksToPlaylistScreenState
   }
 
   Future<void> _pickAndScanFolder() async {
+    if (!await ensureMusicReadPermission(context)) return;
     final path = await FilePicker.getDirectoryPath();
     if (path == null) return;
     // The picker dialog can stay open indefinitely waiting on the user — if

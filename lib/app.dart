@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/platform/android_media_session.dart';
 import 'core/platform/file_open_channel.dart';
 import 'core/settings/app_settings.dart';
 import 'core/theme/theme_provider.dart';
@@ -18,6 +19,9 @@ class MusicPlayerApp extends ConsumerWidget {
     // method channel listener once and never needs to rebuild anything
     // itself. See file_open_channel.dart.
     ref.read(fileOpenChannelProvider);
+    // Same idea: starts the Android media session (lock-screen controls,
+    // background playback). A no-op on other platforms.
+    ref.read(androidMediaSessionProvider);
     return MaterialApp(
       title: 'MysticJam',
       debugShowCheckedModeBanner: false,
