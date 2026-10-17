@@ -10,6 +10,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format_duration.dart';
 import '../../core/library/database.dart';
+import '../../core/library/library_providers.dart';
+import '../../core/library/library_repository.dart';
 import '../../core/playback/playback_controller.dart';
 import '../../core/theme/theme_model.dart';
 import '../../core/theme/theme_provider.dart';
@@ -117,7 +119,8 @@ class DiscPlayerView extends ConsumerStatefulWidget {
 const _keysHeight = 56.0;
 const _panelHeight = 262.0;
 // Device padding, gaps between sections, and the brand row.
-const _chromeHeight = 14.0 + 18 + 16 * 3 + 14;
+const _chromeHeight = 14.0 + 18 + 16 * 3 + _brandHeight + 6;
+const _brandHeight = 14.0;
 const _minDisc = 150.0;
 
 class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
@@ -319,6 +322,38 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
         ? 0.0
         : (shownPos.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
 
+    // What the OLED lists. Normally the play queue, in play order. When the
+    // queue is just this one song (e.g. MysticJam resumed it on launch), list
+    // its whole album instead, so the panel and prev/next still make sense;
+    // picking from it switches the queue over to that album.
+    final queueSongs = [for (final i in playback.order) playback.queue[i]];
+    List<Track>? albumSongs;
+    if (track?.albumId != null && queueSongs.length <= 1) {
+      final albums = ref.watch(albumsProvider).valueOrNull;
+      for (final a in albums ?? const <AlbumWithTracks>[]) {
+        if (a.id == track!.albumId && a.tracks.length > 1) {
+          albumSongs = _albumOrder(a.tracks);
+          break;
+        }
+      }
+    }
+    final browse = albumSongs;
+    final songs = browse ?? queueSongs;
+    final current = browse != null
+        ? browse.indexWhere((t) => t.id == track?.id)
+        : playback.orderIndex;
+    Future<void> pick(int i) => browse != null
+        ? controller.playFromQueue(browse, i)
+        : controller.jumpToOrderIndex(i);
+    final VoidCallback? onPrevious = browse != null
+        ? (current > 0 ? () => pick(current - 1) : null)
+        : (playback.hasPrevious ? controller.previous : null);
+    final VoidCallback? onNext = browse != null
+        ? (current >= 0 && current < browse.length - 1
+              ? () => pick(current + 1)
+              : null)
+        : (playback.hasNext ? controller.next : null);
+
     final colors = theme.colors;
     final body = Color.lerp(colors.surface, colors.background, 0.35)!;
 
@@ -387,8 +422,8 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
                 child: _KeysRow(
                   theme: theme,
                   playback: playback,
-                  onPrevious: playback.hasPrevious ? controller.previous : null,
-                  onNext: playback.hasNext ? controller.next : null,
+                  onPrevious: onPrevious,
+                  onNext: onNext,
                   onPlay: track == null ? null : controller.togglePlayPause,
                   onLoop: controller.cycleRepeatMode,
                   onLyrics: track == null ? null : () => _openLyrics(track),
@@ -400,8 +435,11 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
                 child: _OledPanel(
                   theme: theme,
                   playback: playback,
+                  songs: songs,
+                  current: current,
+                  forceAlbum: browse != null,
                   shownPosition: shownPos,
-                  onJump: controller.jumpToOrderIndex,
+                  onPick: pick,
                 ),
               ),
             ],
@@ -437,6 +475,21 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
       },
     );
   }
+}
+
+/// Album order: by track number, unknown numbers last (same rule as the
+/// album screen).
+List<Track> _albumOrder(List<Track> tracks) {
+  final sorted = [...tracks];
+  sorted.sort((a, b) {
+    final an = a.trackNumber;
+    final bn = b.trackNumber;
+    if (an == null && bn == null) return 0;
+    if (an == null) return 1;
+    if (bn == null) return -1;
+    return an.compareTo(bn);
+  });
+  return sorted;
 }
 
 // ---------------------------------------------------------------------------
@@ -572,12 +625,15 @@ class _BrandRow extends StatelessWidget {
       fontWeight: FontWeight.w700,
       letterSpacing: 2.4,
     );
-    return Row(
+    return SizedBox(
+      height: _brandHeight,
+      child: Row(
       children: [
         Text('MYSTICJAM', style: style),
         const Spacer(),
         if (format != null) Text(format!.toUpperCase(), style: style),
       ],
+      ),
     );
   }
 }
@@ -1153,13 +1209,21 @@ class _OledPanel extends StatefulWidget {
   final AppTheme theme;
   final PlaybackState playback;
   final Duration shownPosition;
-  final Future<void> Function(int orderIndex) onJump;
+  final List<Track> songs;
+
+  /// Index of the playing song within [songs]; -1 if it isn't in the list.
+  final int current;
+  final bool forceAlbum;
+  final Future<void> Function(int index) onPick;
 
   const _OledPanel({
     required this.theme,
     required this.playback,
     required this.shownPosition,
-    required this.onJump,
+    required this.songs,
+    required this.current,
+    required this.forceAlbum,
+    required this.onPick,
   });
 
   @override
@@ -1176,10 +1240,9 @@ class _OledPanelState extends State<_OledPanel> {
   @override
   void didUpdateWidget(_OledPanel old) {
     super.didUpdateWidget(old);
-    if (old.playback.orderIndex != widget.playback.orderIndex &&
-        _cursor == null) {
+    if (old.current != widget.current && _cursor == null) {
       WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _scrollTo(widget.playback.orderIndex, animate: true),
+        (_) => _scrollTo(widget.current, animate: true),
       );
     }
   }
@@ -1188,7 +1251,7 @@ class _OledPanelState extends State<_OledPanel> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _scrollTo(widget.playback.orderIndex, animate: false),
+      (_) => _scrollTo(widget.current, animate: false),
     );
   }
 
@@ -1225,12 +1288,16 @@ class _OledPanelState extends State<_OledPanel> {
     const oled = Color(0xFF000000);
 
     // Songs in the order they'll actually play.
-    final songs = [for (final i in pb.order) pb.queue[i]];
+    final songs = widget.songs;
+    final current = widget.current;
     final isAlbum =
-        songs.isNotEmpty &&
-        songs.every(
-          (s) => (s.albumId ?? s.album) == (songs.first.albumId ?? songs.first.album),
-        );
+        widget.forceAlbum ||
+        (songs.isNotEmpty &&
+            songs.every(
+              (s) =>
+                  (s.albumId ?? s.album) ==
+                  (songs.first.albumId ?? songs.first.album),
+            ));
     final title = track == null
         ? 'NOTHING PLAYING'
         : isAlbum
@@ -1243,7 +1310,7 @@ class _OledPanelState extends State<_OledPanel> {
             if (isAlbum) track.year?.toString(),
           ].whereType<String>().join(' · ');
 
-    final cursorIndex = _cursor?.round() ?? pb.orderIndex;
+    final cursorIndex = _cursor?.round() ?? math.max(current, 0);
     final dur = pb.duration;
     final frac = dur.inMilliseconds <= 0
         ? 0.0
@@ -1323,13 +1390,13 @@ class _OledPanelState extends State<_OledPanel> {
                     itemCount: songs.length,
                     itemBuilder: (context, i) {
                       final song = songs[i];
-                      final playing = i == pb.orderIndex;
+                      final playing = i == current;
                       final cursor = _cursor != null && i == cursorIndex;
                       final fg = playing ? oled : pix;
                       final fgDim = playing ? oled : dim;
                       return GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onTap: () => widget.onJump(i),
+                        onTap: () => widget.onPick(i),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           decoration: BoxDecoration(
@@ -1403,7 +1470,7 @@ class _OledPanelState extends State<_OledPanel> {
                         min: 0,
                         max: (songs.length - 1).toDouble(),
                         divisions: songs.length - 1,
-                        value: (_cursor ?? pb.orderIndex.toDouble()).clamp(
+                        value: (_cursor ?? math.max(current, 0).toDouble()).clamp(
                           0.0,
                           (songs.length - 1).toDouble(),
                         ),
@@ -1415,8 +1482,8 @@ class _OledPanelState extends State<_OledPanel> {
                         },
                         onChangeEnd: (v) {
                           setState(() => _cursor = null);
-                          if (v.round() != pb.orderIndex) {
-                            widget.onJump(v.round());
+                          if (v.round() != current) {
+                            widget.onPick(v.round());
                           }
                         },
                       ),
