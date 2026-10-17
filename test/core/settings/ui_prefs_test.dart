@@ -27,6 +27,7 @@ void main() {
       showFormatTag: false,
       albumColors: false,
       showFps: true,
+      nowPlayingStyle: NowPlayingStyle.classic,
     );
     final back = UiPrefs.fromJson(
       jsonDecode(jsonEncode(prefs.toJson())) as Map<String, dynamic>,
@@ -56,6 +57,18 @@ void main() {
     });
     expect(s.shuffleEnabled, isTrue);
     expect(s.ui.toJson(), const UiPrefs().toJson());
+  });
+
+  test('Now Playing style defaults to the disc and ignores junk', () {
+    expect(const UiPrefs().nowPlayingStyle, NowPlayingStyle.disc);
+    expect(
+      UiPrefs.fromJson({'nowPlayingStyle': 'hologram'}).nowPlayingStyle,
+      NowPlayingStyle.disc,
+    );
+    expect(
+      UiPrefs.fromJson({'nowPlayingStyle': 'classic'}).nowPlayingStyle,
+      NowPlayingStyle.classic,
+    );
   });
 
   test('copyWith changes only the named field', () {

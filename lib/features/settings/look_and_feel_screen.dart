@@ -232,6 +232,18 @@ class _LookAndFeelScreenState extends ConsumerState<LookAndFeelScreen> {
           ),
           header('Now Playing'),
           toggle(
+            'Disc player',
+            'Spinning disc with an OLED track panel instead of the cover layout',
+            ui.nowPlayingStyle == NowPlayingStyle.disc,
+            (v) => set(
+              (u) => u.copyWith(
+                nowPlayingStyle: v
+                    ? NowPlayingStyle.disc
+                    : NowPlayingStyle.classic,
+              ),
+            ),
+          ),
+          toggle(
             'Album colours',
             'Tint the player with the album art\'s colours',
             ui.albumColors,

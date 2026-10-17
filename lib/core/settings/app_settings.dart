@@ -12,6 +12,10 @@ const _recentlyPlayedLimit = 50;
 
 enum LyricsAlign { left, center, right }
 
+/// Which layout the Now Playing screen uses: the original cover-art layout,
+/// or the spinning-disc player with hardware keys and an OLED track panel.
+enum NowPlayingStyle { classic, disc }
+
 /// Look-and-feel preferences (Settings → Look & Feel). Kept in the same
 /// settings file as the session state below since it's the same persistence
 /// story; one immutable bundle so adding an option is one field + one line
@@ -36,6 +40,10 @@ class UiPrefs {
   final bool albumColors;
   final bool showFps;
 
+  /// Now Playing layout (Settings → Look & Feel, or the toggle in the
+  /// Now Playing app bar).
+  final NowPlayingStyle nowPlayingStyle;
+
   const UiPrefs({
     this.lyricsFontSize = 20,
     this.lyricsAlign = LyricsAlign.left,
@@ -48,6 +56,7 @@ class UiPrefs {
     this.showFormatTag = true,
     this.albumColors = true,
     this.showFps = false,
+    this.nowPlayingStyle = NowPlayingStyle.disc,
   });
 
   UiPrefs copyWith({
@@ -62,6 +71,7 @@ class UiPrefs {
     bool? showFormatTag,
     bool? albumColors,
     bool? showFps,
+    NowPlayingStyle? nowPlayingStyle,
   }) => UiPrefs(
     lyricsFontSize: lyricsFontSize ?? this.lyricsFontSize,
     lyricsAlign: lyricsAlign ?? this.lyricsAlign,
@@ -74,6 +84,7 @@ class UiPrefs {
     showFormatTag: showFormatTag ?? this.showFormatTag,
     albumColors: albumColors ?? this.albumColors,
     showFps: showFps ?? this.showFps,
+    nowPlayingStyle: nowPlayingStyle ?? this.nowPlayingStyle,
   );
 
   Map<String, dynamic> toJson() => {
@@ -88,6 +99,7 @@ class UiPrefs {
     'showFormatTag': showFormatTag,
     'albumColors': albumColors,
     'showFps': showFps,
+    'nowPlayingStyle': nowPlayingStyle.name,
   };
 
   factory UiPrefs.fromJson(Map<String, dynamic> j) {
@@ -125,6 +137,9 @@ class UiPrefs {
       showFormatTag: flag('showFormatTag', d.showFormatTag),
       albumColors: flag('albumColors', d.albumColors),
       showFps: flag('showFps', d.showFps),
+      nowPlayingStyle:
+          NowPlayingStyle.values.asNameMap()[j['nowPlayingStyle']] ??
+          d.nowPlayingStyle,
     );
   }
 }

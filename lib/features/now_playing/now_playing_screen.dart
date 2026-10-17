@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format_duration.dart';
 import '../../core/playback/playback_controller.dart';
+import '../../core/settings/app_settings.dart';
 import '../../core/theme/album_palette.dart';
 import '../../core/theme/theme_provider.dart';
 import '../../widgets/themed/round_buttons.dart';
@@ -13,6 +14,7 @@ import '../../widgets/themed/themed_icon.dart';
 import '../../widgets/themed/themed_progress_bar.dart';
 import '../../widgets/themed/themed_volume_slider.dart';
 import '../../widgets/themed/track_art.dart';
+import 'disc_player_view.dart';
 import 'lyrics_screen.dart';
 import 'queue_screen.dart';
 
@@ -55,6 +57,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     final playback = ref.watch(playbackControllerProvider);
     final controller = ref.read(playbackControllerProvider.notifier);
     final track = playback.currentTrack;
+    final style = ref.watch(uiPrefsProvider).nowPlayingStyle;
+    final disc = style == NowPlayingStyle.disc;
 
     return ProviderScope(
       overrides: [themeProvider.overrideWithValue(theme)],
@@ -77,7 +81,24 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
             backgroundColor: Colors.transparent,
             elevation: 0,
             actions: [
-              if (track != null)
+              IconButton(
+                tooltip: disc ? 'Classic view' : 'Disc view',
+                icon: Icon(
+                  disc ? Icons.crop_square_rounded : Icons.album_outlined,
+                  color: theme.colors.controlActive,
+                ),
+                onPressed: () => ref
+                    .read(appSettingsProvider.notifier)
+                    .updateUi(
+                      (u) => u.copyWith(
+                        nowPlayingStyle: disc
+                            ? NowPlayingStyle.classic
+                            : NowPlayingStyle.disc,
+                      ),
+                    ),
+              ),
+              // The disc player has its own lyrics key.
+              if (track != null && !disc)
                 IconButton(
                   tooltip: 'Lyrics',
                   icon: const ThemedIcon(ThemedIconSlot.lyrics),
@@ -96,7 +117,9 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
               ),
             ],
           ),
-          body: SafeArea(
+          body: disc
+              ? const SafeArea(child: DiscPlayerView())
+              : SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: LayoutBuilder(

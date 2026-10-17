@@ -318,6 +318,12 @@ class PlaybackController extends Notifier<PlaybackState> {
     await _engine.open(track.filePath);
   }
 
+  /// Jumps straight to a position in the current play order (the disc
+  /// player's OLED track list and slider), keeping the queue and any shuffle
+  /// order exactly as they are.
+  Future<void> jumpToOrderIndex(int orderIndex) =>
+      _playAtOrderIndex(orderIndex);
+
   Future<void> next() async {
     if (state.order.isEmpty) return;
     var newIndex = state.orderIndex + 1;
