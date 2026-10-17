@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// The most recent deletion's undo action, if it hasn't been consumed yet —
 /// set right after a track/playlist delete (alongside the snackbar's own
 /// Undo button, see track_actions.dart/playlist_actions.dart), and read by
-/// the app-wide Ctrl+Z shortcut (see app.dart) so undo isn't only reachable
+/// the app-wide Ctrl+Z shortcut (see widgets/app_shortcuts.dart) so undo isn't only reachable
 /// by clicking the snackbar before it disappears.
 final lastUndoActionProvider = StateProvider<VoidCallback?>((ref) => null);
 
