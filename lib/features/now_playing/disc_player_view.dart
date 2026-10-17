@@ -1424,13 +1424,10 @@ class _OledPanelState extends State<_OledPanel> {
   static const _rowHeight = 24.0;
   final _scroll = ScrollController();
 
-  /// Slider cursor while dragging; null when following the playing song.
-  double? _cursor;
-
   @override
   void didUpdateWidget(_OledPanel old) {
     super.didUpdateWidget(old);
-    if (old.current != widget.current && _cursor == null) {
+    if (old.current != widget.current) {
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => _scrollTo(widget.current, animate: true),
       );
@@ -1500,7 +1497,6 @@ class _OledPanelState extends State<_OledPanel> {
             if (isAlbum) track.year?.toString(),
           ].whereType<String>().join(' · ');
 
-    final cursorIndex = _cursor?.round() ?? math.max(current, 0);
     final dur = pb.duration;
 
     Widget flag(String label, bool on) => Container(
@@ -1535,7 +1531,7 @@ class _OledPanelState extends State<_OledPanel> {
                     const Spacer(),
                     if (songs.isNotEmpty)
                       Text(
-                        '${(cursorIndex + 1).toString().padLeft(2, '0')}/'
+                        '${(math.max(current, 0) + 1).toString().padLeft(2, '0')}/'
                         '${songs.length.toString().padLeft(2, '0')}',
                         style: _oledText(11, dim, spacing: 1),
                       ),
@@ -1575,7 +1571,6 @@ class _OledPanelState extends State<_OledPanel> {
                     itemBuilder: (context, i) {
                       final song = songs[i];
                       final playing = i == current;
-                      final cursor = _cursor != null && i == cursorIndex;
                       final fg = playing ? oled : pix;
                       final fgDim = playing ? oled : dim;
                       return GestureDetector(
@@ -1585,9 +1580,6 @@ class _OledPanelState extends State<_OledPanel> {
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           decoration: BoxDecoration(
                             color: playing ? pix : Colors.transparent,
-                            border: cursor && !playing
-                                ? Border.all(color: pix)
-                                : null,
                             borderRadius: BorderRadius.circular(2),
                           ),
                           child: Row(
@@ -1633,44 +1625,7 @@ class _OledPanelState extends State<_OledPanel> {
                     },
                   ),
                 ),
-                if (songs.length > 1)
-                  SliderTheme(
-                    data: SliderThemeData(
-                      trackHeight: 2,
-                      activeTrackColor: pix,
-                      inactiveTrackColor: dim,
-                      thumbColor: pix,
-                      overlayColor: pix.withValues(alpha: 0.15),
-                      thumbShape: const RoundSliderThumbShape(
-                        enabledThumbRadius: 6,
-                      ),
-                      overlayShape: const RoundSliderOverlayShape(
-                        overlayRadius: 14,
-                      ),
-                    ),
-                    child: SizedBox(
-                      height: 26,
-                      child: Slider(
-                        min: 0,
-                        max: (songs.length - 1).toDouble(),
-                        divisions: songs.length - 1,
-                        value: (_cursor ?? math.max(current, 0).toDouble())
-                            .clamp(0.0, (songs.length - 1).toDouble()),
-                        semanticFormatterCallback: (v) =>
-                            songs[v.round()].title,
-                        onChanged: (v) {
-                          setState(() => _cursor = v);
-                          _scrollTo(v.round(), animate: false);
-                        },
-                        onChangeEnd: (v) {
-                          setState(() => _cursor = null);
-                          if (v.round() != current) {
-                            widget.onPick(v.round());
-                          }
-                        },
-                      ),
-                    ),
-                  ),
+                if (track != null) _OledVolumeSlider(pix: pix, dim: dim),
                 // The only part of the panel that follows the position, so
                 // it alone rebuilds on each tick.
                 ValueListenableBuilder<Duration>(
@@ -1733,6 +1688,53 @@ class _OledPanelState extends State<_OledPanel> {
               child: CustomPaint(painter: _ScanlinePainter()),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// System volume, in the OLED panel's pixel colours. Changes the volume
+/// live on every drag tick: the Linux volume controller collapses a fast
+/// drag into one-at-a-time updates that end on the release value. Watches
+/// only the volume, so a drag doesn't rebuild the rest of the view.
+class _OledVolumeSlider extends ConsumerWidget {
+  final Color pix;
+  final Color dim;
+
+  const _OledVolumeSlider({required this.pix, required this.dim});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final volume = ref.watch(
+      playbackControllerProvider.select((s) => s.volume),
+    );
+    final controller = ref.read(playbackControllerProvider.notifier);
+    return SizedBox(
+      height: 26,
+      child: Row(
+        children: [
+          ThemedIcon(ThemedIconSlot.volumeDown, size: 14, color: dim),
+          Expanded(
+            child: SliderTheme(
+              data: SliderThemeData(
+                trackHeight: 2,
+                activeTrackColor: pix,
+                inactiveTrackColor: dim,
+                thumbColor: pix,
+                overlayColor: pix.withValues(alpha: 0.15),
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+              ),
+              child: Slider(
+                value: volume.clamp(0.0, 1.0),
+                semanticFormatterCallback: (v) =>
+                    'Volume ${(v * 100).round()}%',
+                onChanged: (v) => unawaited(controller.setVolume(v)),
+              ),
+            ),
+          ),
+          ThemedIcon(ThemedIconSlot.volumeUp, size: 14, color: dim),
         ],
       ),
     );

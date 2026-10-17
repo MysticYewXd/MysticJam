@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -10,12 +11,27 @@ import 'package:music_player/features/now_playing/disc_player_view.dart';
 
 class _FakePlayback extends PlaybackController {
   final PlaybackState initial;
+  final volumes = <double>[];
+  final seeks = <Duration>[];
+  final jumps = <int>[];
   _FakePlayback(this.initial);
 
   @override
   PlaybackState build() => initial;
 
   void push(PlaybackState s) => state = s;
+
+  @override
+  Future<void> setVolume(double volume) async {
+    volumes.add(volume);
+    state = state.copyWith(volume: volume);
+  }
+
+  @override
+  Future<void> seek(Duration position) async => seeks.add(position);
+
+  @override
+  Future<void> jumpToOrderIndex(int orderIndex) async => jumps.add(orderIndex);
 }
 
 Track _track(int id) => Track(
@@ -28,7 +44,11 @@ Track _track(int id) => Track(
   dateAdded: DateTime(2025),
 );
 
-PlaybackState _state({bool isPlaying = false, Duration? position}) {
+PlaybackState _state({
+  bool isPlaying = false,
+  Duration? position,
+  double volume = 1.0,
+}) {
   final queue = [_track(1), _track(2)];
   return PlaybackState(
     currentTrack: queue.first,
@@ -38,6 +58,7 @@ PlaybackState _state({bool isPlaying = false, Duration? position}) {
     isPlaying: isPlaying,
     duration: const Duration(minutes: 3),
     position: position ?? Duration.zero,
+    volume: volume,
   );
 }
 
@@ -172,6 +193,78 @@ void main() {
       expect(find.text('0:42'), findsNWidgets(2));
       expect(find.text('0:00'), findsNothing);
       expect(find.text('Song 1'), findsOneWidget);
+    });
+  });
+
+  group('OLED volume slider', () {
+    testWidgets('replaces the song slider and shows the current volume', (
+      tester,
+    ) async {
+      await _pump(tester, _state(volume: 0.6));
+      await tester.pumpAndSettle();
+      final slider = tester.widget<Slider>(find.byType(Slider));
+      expect(slider.divisions, isNull, reason: 'not the old song picker');
+      expect(slider.value, 0.6);
+      expect(find.byIcon(Icons.volume_down), findsOneWidget);
+      expect(find.byIcon(Icons.volume_up), findsOneWidget);
+    });
+
+    testWidgets('changes the volume live while dragging', (tester) async {
+      final fake = await _pump(tester, _state(volume: 0.5));
+      await tester.pumpAndSettle();
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(Slider)),
+      );
+      for (var i = 0; i < 5; i++) {
+        await gesture.moveBy(const Offset(-20, 0));
+        await tester.pump();
+      }
+      final duringDrag = fake.volumes.length;
+      expect(duringDrag, greaterThan(1), reason: 'live, not only on release');
+      await gesture.up();
+      await tester.pump();
+      expect(fake.volumes.last, lessThan(0.5));
+      expect(
+        tester.widget<Slider>(find.byType(Slider)).value,
+        fake.volumes.last,
+      );
+    });
+
+    testWidgets('follows volume changes made elsewhere', (tester) async {
+      final fake = await _pump(tester, _state(volume: 0.8));
+      await tester.pumpAndSettle();
+      fake.push(_state(volume: 0.2));
+      await tester.pump();
+      expect(tester.widget<Slider>(find.byType(Slider)).value, 0.2);
+    });
+
+    testWidgets('tapping a song still plays it', (tester) async {
+      final fake = await _pump(tester, _state());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Song 2'));
+      expect(fake.jumps, [1]);
+    });
+
+    testWidgets('dragging the disc still seeks', (tester) async {
+      final fake = await _pump(tester, _state());
+      await tester.pumpAndSettle();
+      final disc = find.byWidgetPredicate(
+        (w) => w is Semantics && (w.properties.label ?? '').startsWith('Disc'),
+      );
+      final centre = tester.getCenter(disc);
+      // A quarter turn clockwise, starting at 3 o'clock.
+      final gesture = await tester.startGesture(centre + const Offset(100, 0));
+      for (var i = 1; i <= 10; i++) {
+        final a = i / 10 * math.pi / 2;
+        await gesture.moveTo(
+          centre + Offset(math.cos(a) * 100, math.sin(a) * 100),
+        );
+        await tester.pump();
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(fake.seeks, hasLength(1));
+      expect(fake.seeks.single, greaterThan(const Duration(seconds: 5)));
     });
   });
 }
