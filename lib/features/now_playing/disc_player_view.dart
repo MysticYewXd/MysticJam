@@ -145,6 +145,11 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
   bool _scrubbing = false;
   double _lastPointerAngle = 0;
 
+  // True while the OLED seek bar is being dragged, or its seek is still
+  // landing — position ticks are ignored meanwhile so the bar doesn't jump
+  // back. Unlike a disc scrub, the disc keeps spinning.
+  bool _barSeeking = false;
+
   // What the progress arc and OLED clock show: the playback position, or the
   // scrub position while dragging. A notifier rather than widget state, so a
   // position tick (many per second) repaints just those two instead of
@@ -261,6 +266,29 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
     _wake();
   }
 
+  // --- seek bar (OLED panel) ------------------------------------------------
+
+  /// Shows [fraction] of the song on the clock and the arc without seeking.
+  void _barPreview(double fraction) {
+    final duration = ref.read(playbackControllerProvider).duration;
+    if (duration <= Duration.zero) return;
+    _barSeeking = true;
+    _shownPos.value = duration * fraction.clamp(0.0, 1.0);
+  }
+
+  /// Seeks to [fraction] (a tap), or to the previewed spot (end of a drag).
+  Future<void> _barCommit([double? fraction]) async {
+    if (fraction != null) _barPreview(fraction);
+    if (!_barSeeking) return;
+    await ref.read(playbackControllerProvider.notifier).seek(_shownPos.value);
+    _barSeeking = false;
+  }
+
+  void _barCancel() {
+    _barSeeking = false;
+    _shownPos.value = ref.read(playbackControllerProvider).position;
+  }
+
   void _wheelScrub(PointerSignalEvent e) {
     if (e is! PointerScrollEvent) return;
     final playback = ref.read(playbackControllerProvider);
@@ -357,7 +385,7 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
       _,
       pos,
     ) {
-      if (!_scrubbing) _shownPos.value = pos;
+      if (!_scrubbing && !_barSeeking) _shownPos.value = pos;
     });
 
     final art = ref.watch(_discArtProvider(track?.albumArtPath));
@@ -488,6 +516,9 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
                   forceAlbum: browse != null,
                   position: _shownPos,
                   onPick: pick,
+                  onSeekPreview: _barPreview,
+                  onSeekCommit: _barCommit,
+                  onSeekCancel: _barCancel,
                 ),
               ),
             ],
@@ -1406,6 +1437,12 @@ class _OledPanel extends StatefulWidget {
   final bool forceAlbum;
   final Future<void> Function(int index) onPick;
 
+  /// Seek bar: preview a fraction of the song while dragging, commit it (a
+  /// tap passes its fraction; the end of a drag passes null), or cancel.
+  final ValueChanged<double> onSeekPreview;
+  final Future<void> Function([double? fraction]) onSeekCommit;
+  final VoidCallback onSeekCancel;
+
   const _OledPanel({
     required this.theme,
     required this.playback,
@@ -1414,6 +1451,9 @@ class _OledPanel extends StatefulWidget {
     required this.current,
     required this.forceAlbum,
     required this.onPick,
+    required this.onSeekPreview,
+    required this.onSeekCommit,
+    required this.onSeekCancel,
   });
 
   @override
@@ -1645,15 +1685,13 @@ class _OledPanelState extends State<_OledPanel> {
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Container(
-                            height: 5,
-                            color: Colors.white.withValues(alpha: 0.08),
-                            alignment: Alignment.centerLeft,
-                            child: FractionallySizedBox(
-                              widthFactor: frac,
-                              heightFactor: 1,
-                              child: ColoredBox(color: pix),
-                            ),
+                          child: _OledSeekBar(
+                            fraction: frac,
+                            pix: pix,
+                            enabled: track != null && dur > Duration.zero,
+                            onPreview: widget.onSeekPreview,
+                            onCommit: widget.onSeekCommit,
+                            onCancel: widget.onSeekCancel,
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -1690,6 +1728,60 @@ class _OledPanelState extends State<_OledPanel> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The OLED clock row's progress bar, made seekable: tap to jump, or drag
+/// to preview (clock and disc arc follow) and seek on release. The bar stays
+/// 5 px tall; the touch area around it is taller so it's easy to hit.
+class _OledSeekBar extends StatelessWidget {
+  final double fraction;
+  final Color pix;
+  final bool enabled;
+  final ValueChanged<double> onPreview;
+  final Future<void> Function([double? fraction]) onCommit;
+  final VoidCallback onCancel;
+
+  const _OledSeekBar({
+    required this.fraction,
+    required this.pix,
+    required this.enabled,
+    required this.onPreview,
+    required this.onCommit,
+    required this.onCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bar = Container(
+      height: 5,
+      color: Colors.white.withValues(alpha: 0.08),
+      alignment: Alignment.centerLeft,
+      child: FractionallySizedBox(
+        widthFactor: fraction,
+        heightFactor: 1,
+        child: ColoredBox(color: pix),
+      ),
+    );
+    if (!enabled) return bar;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        double at(Offset local) => local.dx / constraints.maxWidth;
+        return MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            key: const ValueKey('disc-seek-bar'),
+            behavior: HitTestBehavior.opaque,
+            onTapUp: (d) => onCommit(at(d.localPosition)),
+            onHorizontalDragStart: (d) => onPreview(at(d.localPosition)),
+            onHorizontalDragUpdate: (d) => onPreview(at(d.localPosition)),
+            onHorizontalDragEnd: (_) => onCommit(),
+            onHorizontalDragCancel: onCancel,
+            child: SizedBox(height: 20, child: Center(child: bar)),
+          ),
+        );
+      },
     );
   }
 }

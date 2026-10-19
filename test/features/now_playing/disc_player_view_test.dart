@@ -267,4 +267,66 @@ void main() {
       expect(fake.seeks.single, greaterThan(const Duration(seconds: 5)));
     });
   });
+
+  group('OLED seek bar', () {
+    final bar = find.byKey(const ValueKey('disc-seek-bar'));
+
+    /// The point [fraction] of the way along the bar, vertically centred.
+    Offset along(WidgetTester tester, double fraction) {
+      final rect = tester.getRect(bar);
+      return Offset(rect.left + rect.width * fraction, rect.center.dy);
+    }
+
+    Matcher near(Duration d) => predicate<Duration>(
+      (x) => (x - d).abs() < const Duration(seconds: 2),
+      'within 2 s of $d',
+    );
+
+    testWidgets('a tap jumps to that point in the song', (tester) async {
+      final fake = await _pump(tester, _state());
+      await tester.pumpAndSettle();
+      await tester.tapAt(along(tester, 0.25));
+      await tester.pump();
+      expect(fake.seeks, [near(const Duration(seconds: 45))]);
+    });
+
+    testWidgets('a drag previews live and seeks once on release', (
+      tester,
+    ) async {
+      final fake = await _pump(tester, _state(isPlaying: true));
+      await tester.pump();
+      final gesture = await tester.startGesture(along(tester, 0.1));
+      for (var i = 1; i <= 8; i++) {
+        await gesture.moveTo(along(tester, 0.1 + i * 0.05));
+        await tester.pump();
+      }
+      // The clock (and hidden scrub label) follow the finger...
+      expect(find.text('1:30'), findsNWidgets(2));
+      expect(fake.seeks, isEmpty, reason: 'nothing seeks mid-drag');
+      // ...and a position tick arriving mid-drag doesn't yank it back.
+      fake.push(_state(isPlaying: true, position: const Duration(seconds: 5)));
+      await tester.pump();
+      expect(find.text('1:30'), findsNWidgets(2));
+      // The disc stays out of scrub mode: its big scrub label is hidden.
+      expect(
+        tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).opacity,
+        0,
+      );
+
+      await gesture.up();
+      await tester.pump();
+      expect(fake.seeks, [near(const Duration(seconds: 90))]);
+
+      // Once the seek has landed, position ticks drive the clock again.
+      fake.push(_state(isPlaying: true, position: const Duration(seconds: 91)));
+      await tester.pump();
+      expect(find.text('1:31'), findsNWidgets(2));
+    });
+
+    testWidgets('inactive with nothing playing', (tester) async {
+      await _pump(tester, const PlaybackState());
+      await tester.pumpAndSettle();
+      expect(bar, findsNothing);
+    });
+  });
 }
