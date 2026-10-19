@@ -6,6 +6,7 @@ import 'package:music_player/core/audio/audio_engine.dart';
 import 'package:music_player/core/audio/audio_engine_provider.dart';
 import 'package:music_player/core/audio/system_volume_controller.dart';
 import 'package:music_player/core/audio/system_volume_provider.dart';
+import 'package:music_player/core/platform/mpris.dart';
 
 class _FakeAudioEngine implements AudioEngine {
   @override
@@ -76,6 +77,8 @@ void main() {
           systemVolumeControllerProvider.overrideWithValue(
             _FakeSystemVolumeController(),
           ),
+          // Keeps the test off the real desktop session bus.
+          mprisProvider.overrideWith((ref) {}),
         ],
         child: const MusicPlayerApp(),
       ),

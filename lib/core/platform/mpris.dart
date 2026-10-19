@@ -212,7 +212,14 @@ final mprisProvider = Provider<void>((ref) {
     () => ref.read(playbackControllerProvider),
     () => ref.read(playbackControllerProvider.notifier),
   );
-  final client = DBusClient.session();
+  // Throws when there is no session bus address (minimal or headless
+  // systems), so it sits behind a guard like the rest of the setup.
+  final DBusClient client;
+  try {
+    client = DBusClient.session();
+  } catch (_) {
+    return;
+  }
   var closed = false;
   ref.onDispose(() {
     closed = true;
