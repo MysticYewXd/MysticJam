@@ -16,6 +16,29 @@ Run the test suite:
 flutter test
 ```
 
+### Rust core
+
+Performance-critical code lives in a Rust crate, `rust/`, called from Dart
+through [flutter_rust_bridge](https://cjycode.com/flutter_rust_bridge/).
+The Flutter build compiles and bundles it automatically, so a
+[Rust toolchain](https://rustup.rs) is required to build the app.
+
+After changing the Rust API (`rust/src/api/`), regenerate the Dart bindings
+in `lib/src/rust/`:
+
+```sh
+cargo install flutter_rust_bridge_codegen --version 2.13.0 --locked  # once
+flutter_rust_bridge_codegen generate
+```
+
+Rust checks:
+
+```sh
+cargo fmt --manifest-path rust/Cargo.toml --check
+cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
+cargo test --manifest-path rust/Cargo.toml
+```
+
 ## Building a release
 
 ```sh
