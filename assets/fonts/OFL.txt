@@ -1,5 +1,6 @@
 Fonts bundled in this folder (static instances generated from the variable
-fonts shipped with the Vesper design system, see mysticjam/fonts/):
+fonts shipped with the Vesper design system; the design reference folder was
+removed, git commit f0dc900 still has the originals):
 
   DMSans-400.ttf, DMSans-500.ttf, DMSans-600.ttf
     Copyright 2014 The DM Sans Project Authors

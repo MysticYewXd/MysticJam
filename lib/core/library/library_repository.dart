@@ -348,10 +348,6 @@ class LibraryRepository {
     }
   }
 
-  Future<void> clearAll() {
-    return db.delete(db.tracks).go();
-  }
-
   /// Wipes tracks, playlists, and playlist memberships — a full reset, used
   /// by Settings' "Clear Library" (playlists left behind would just be
   /// empty shells otherwise).

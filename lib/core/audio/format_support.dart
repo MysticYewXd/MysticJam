@@ -33,6 +33,8 @@ bool isSupportedMediaFile(String filePath) {
   return allSupportedExtensions.contains(ext);
 }
 
+/// Not used yet: kept on purpose for upcoming support for music files that
+/// carry a video stream (e.g. music videos in .mp4/.mkv).
 bool isVideoContainer(String filePath) {
   final dot = filePath.lastIndexOf('.');
   if (dot == -1 || dot == filePath.length - 1) return false;

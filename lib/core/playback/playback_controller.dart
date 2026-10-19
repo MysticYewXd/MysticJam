@@ -291,8 +291,6 @@ class PlaybackController extends Notifier<PlaybackState> {
     await _playAtOrderIndex(orderIndex);
   }
 
-  Future<void> playSingle(Track track) => playFromQueue([track], 0);
-
   /// Moves to a position within the CURRENT order/queue without rebuilding
   /// it — used by next()/previous() so shuffle order stays stable across
   /// track changes instead of re-shuffling every time.

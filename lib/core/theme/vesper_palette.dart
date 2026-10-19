@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'theme_model.dart';
 
-// Vesper design-system palettes (mysticjam/tokens.json), mapped onto the
-// app's colour slots: surface-0 -> background, surface-1 -> chrome,
+// Vesper design-system palettes (from the design reference's tokens.json;
+// the reference folder was removed, git commit f0dc900 still has it), mapped
+// onto the app's colour slots: surface-0 -> background, surface-1 -> chrome,
 // surface-2 -> surface, surface-3 -> progressBarTrack, lavender -> primary,
 // ember -> accent/progressBar, rose -> error.
 
