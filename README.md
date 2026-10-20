@@ -2,7 +2,7 @@
 
 <img src="linux/mysticjam.svg" width="96" alt="MysticJam logo">
 
-# MysticJam-V1_stable
+# MysticJam
 
 **Your music, on your machine. Nothing else.**
 
