@@ -2,7 +2,7 @@
 Type=Application
 Name=MysticJam
 Comment=Local-only music player — no accounts, no streaming
-Exec=music_player %U
+Exec=mysticjam %U
 Icon=com.musicplayer.music_player
 Terminal=false
 Categories=Audio;Music;Player;AudioVideo;
