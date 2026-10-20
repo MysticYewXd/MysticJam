@@ -325,7 +325,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                   SizedBox(height: gap(32)),
                                   ThemedVolumeSlider(
                                     value: playback.volume,
-                                    onChangeEnd: controller.setVolume,
+                                    onChanged: controller.setVolume,
                                   ),
                                   SizedBox(height: gap(16)),
                                 ],
