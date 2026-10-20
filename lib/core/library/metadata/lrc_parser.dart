@@ -14,6 +14,22 @@ class LyricLine {
 /// text.
 final _timestamp = RegExp(r'^\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]');
 
+/// Enhanced LRC (word-level timing, as in Apple Music exports) adds a
+/// `<mm:ss.xx>` before each word and an optional singer marker (`v1:`,
+/// `v2:`) at the start of the text. Both are stripped for display; the
+/// stored lyrics keep them.
+final _wordTimestamp = RegExp(r'<\d{1,3}:\d{2}(?:[.:]\d{1,3})?>');
+final _singerMarker = RegExp(r'^v\d+:\s*');
+final _spaces = RegExp(r'\s+');
+
+/// The lyric text after a line's timestamps, without Enhanced LRC codes.
+/// Plain lines are only trimmed, so ordinary lyrics are shown as written.
+String _lyricText(String rest) {
+  final text = rest.trim().replaceFirst(_singerMarker, '');
+  if (!_wordTimestamp.hasMatch(text)) return text;
+  return text.replaceAll(_wordTimestamp, '').replaceAll(_spaces, ' ').trim();
+}
+
 /// Parses raw `.lrc` file content into time-ordered lyric lines. Never
 /// throws — a malformed or non-LRC file just yields fewer (or zero) lines
 /// rather than crashing the scan that reads it.
@@ -40,7 +56,7 @@ List<LyricLine> parseLrc(String content) {
     }
 
     if (timestamps.isEmpty) continue;
-    final text = remaining.trim();
+    final text = _lyricText(remaining);
     if (text.isEmpty) continue;
     for (final time in timestamps) {
       lines.add(LyricLine(time, text));

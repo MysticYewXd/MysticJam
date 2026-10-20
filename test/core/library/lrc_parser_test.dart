@@ -69,6 +69,45 @@ not a timestamp line
     });
   });
 
+  group('Enhanced LRC (word timing)', () {
+    test('word timestamps and the singer marker are removed', () {
+      final lines = parseLrc(
+        '[00:14.28]v1: <00:14.287>I <00:14.509>know <00:14.794>I '
+        '<00:15.092>got <00:15.383>to <00:15.520>be <00:15.806>right '
+        '<00:16.091>now<00:16.323>',
+      );
+      expect(lines.single.text, 'I know I got to be right now');
+      expect(lines.single.time, const Duration(seconds: 14, milliseconds: 280));
+    });
+
+    test('words joined without spaces stay joined', () {
+      final lines = parseLrc(
+        '[00:05.01]v1: <00:05.016>Nah-<00:05.273>nah-<00:05.535>nah, '
+        '<00:05.821>that<00:07.283>',
+      );
+      expect(lines.single.text, 'Nah-nah-nah, that');
+    });
+
+    test('both two- and three-digit fractions, and a second singer', () {
+      final lines = parseLrc('[00:01.00]v2: <00:01.00>Hey <00:01.5>there');
+      expect(lines.single.text, 'Hey there');
+    });
+
+    test('a line of only word timestamps is skipped', () {
+      expect(parseLrc('[00:01.00]v1: <00:01.000><00:02.000>'), isEmpty);
+    });
+
+    test('plain lyrics with colons or a mid-line v1: are left alone', () {
+      final lines = parseLrc(
+        '[00:01.00]Yo: listen  up\n[00:02.00]They said v1: is next',
+      );
+      expect(lines.map((l) => l.text), [
+        'Yo: listen  up',
+        'They said v1: is next',
+      ]);
+    });
+  });
+
   group('activeLyricIndex', () {
     final lines = [
       const LyricLine(Duration(seconds: 1), 'A'),
