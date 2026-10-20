@@ -7,8 +7,10 @@ import '../../widgets/themed/themed_icon.dart';
 import '../../widgets/themed/track_art.dart';
 
 /// Shows the current play queue in play order, with the now-playing track
-/// highlighted. Drag to reorder — reordering never restarts or skips
-/// whatever is currently playing (see PlaybackController.reorderQueue).
+/// highlighted. Drag the handle to reorder — reordering never restarts or
+/// skips whatever is currently playing (see PlaybackController.reorderQueue)
+/// — or tap ✕ to remove a song; removing the playing song moves on to the
+/// next one (see PlaybackController.removeFromQueue).
 class QueueScreen extends ConsumerWidget {
   const QueueScreen({super.key});
 
@@ -32,6 +34,9 @@ class QueueScreen extends ConsumerWidget {
           : ReorderableListView.builder(
               itemCount: playback.order.length,
               onReorderItem: controller.reorderQueue,
+              // Each row has its own handle next to the remove button; the
+              // automatic desktop handle would sit on top of that button.
+              buildDefaultDragHandles: false,
               itemBuilder: (context, i) {
                 final track = playback.queue[playback.order[i]];
                 final isCurrent = i == playback.orderIndex;
@@ -59,15 +64,45 @@ class QueueScreen extends ConsumerWidget {
                           style: TextStyle(color: theme.colors.textSecondary),
                         )
                       : null,
-                  trailing: isCurrent
-                      ? ThemedIcon(
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isCurrent)
+                        ThemedIcon(
                           playback.isPlaying
                               ? ThemedIconSlot.pause
                               : ThemedIconSlot.play,
                           color: theme.colors.primary,
                           size: 18,
-                        )
-                      : null,
+                        ),
+                      IconButton(
+                        tooltip: 'Remove from queue',
+                        icon: ThemedIcon(
+                          ThemedIconSlot.close,
+                          color: theme.colors.textSecondary,
+                          size: 18,
+                        ),
+                        onPressed: () => controller.removeFromQueue(i),
+                      ),
+                      ReorderableDragStartListener(
+                        index: i,
+                        child: Tooltip(
+                          message: 'Drag to reorder',
+                          child: MouseRegion(
+                            cursor: SystemMouseCursors.grab,
+                            child: Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: Icon(
+                                Icons.drag_handle,
+                                color: theme.colors.textSecondary,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 );
               },
             ),
