@@ -9,7 +9,7 @@ import 'package:music_player/core/library/album_grouping.dart';
 import 'package:music_player/core/library/database.dart';
 import 'package:music_player/core/library/library_repository.dart';
 import 'package:music_player/core/library/library_scanner.dart';
-import 'package:music_player/core/library/metadata/flac_metadata_reader.dart';
+import 'package:music_player/core/library/track_file_reader.dart';
 
 import '../../helpers/flac_fixture.dart';
 import '../../helpers/rust_lib.dart';
@@ -60,7 +60,7 @@ void main() {
           'DATE=2019-05-03',
         ]);
 
-        final meta = await readFlacMetadata(path);
+        final meta = (await readTrackFile(path)).metadata;
 
         expect(meta.albumArtist, 'Various Artists');
         expect(meta.year, 2019);
@@ -72,7 +72,7 @@ void main() {
       () async {
         final path = write('a.flac', ['ALBUM ARTIST=Someone', 'YEAR=1984']);
 
-        final meta = await readFlacMetadata(path);
+        final meta = (await readTrackFile(path)).metadata;
 
         expect(meta.albumArtist, 'Someone');
         expect(meta.year, 1984);
@@ -82,7 +82,7 @@ void main() {
     test('FLAC: absent tags stay null rather than empty/zero', () async {
       final path = write('a.flac', ['TITLE=Just a title']);
 
-      final meta = await readFlacMetadata(path);
+      final meta = (await readTrackFile(path)).metadata;
 
       expect(meta.albumArtist, isNull);
       expect(meta.year, isNull);

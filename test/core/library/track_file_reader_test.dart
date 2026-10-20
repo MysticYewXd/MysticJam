@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:music_player/core/library/metadata/metadata_reader.dart';
 import 'package:music_player/core/library/track_file_reader.dart';
 import 'package:path/path.dart' as p;
 
@@ -34,10 +33,20 @@ void main() {
       'tagged.wma', // Dart reader
     ]) {
       final f = await readTrackFile(_fixture(name));
-      expect(f.metadata.title, 'Fixture Title', reason: name);
-      expect(f.metadata.album, 'Fixture Album', reason: name);
-      expect(f.metadata.lyrics, _plain, reason: name);
+      final m = f.metadata;
+      expect(m.title, 'Fixture Title', reason: name);
+      expect(m.artist, 'Fixture Artist', reason: name);
+      expect(m.album, 'Fixture Album', reason: name);
+      expect(m.albumArtist, 'Fixture Album Artist', reason: name);
+      expect(m.genre, 'Fixture Genre', reason: name);
+      expect(m.lyrics, _plain, reason: name);
       expect(f.syncedLyrics, isNull, reason: name);
+      // The WMA reader doesn't read ffmpeg's plain "date" descriptor or a
+      // DWORD track number (see wma_metadata_reader.dart).
+      if (name != 'tagged.wma') {
+        expect(m.year, 2001, reason: name);
+        expect(m.trackNumber, 3, reason: name);
+      }
     }
   });
 
@@ -59,33 +68,6 @@ void main() {
     final f = await readTrackFile(_fixture('headers.wma'));
     expect(f.metadata.lyrics, 'Words here');
     expect(f.syncedLyrics, isNull);
-  });
-
-  test('Rust and the Dart readers agree on tags', () async {
-    for (final name in [
-      'tagged.mp3',
-      'tagged.flac',
-      'tagged.m4a',
-      'tagged.ogg',
-      'tagged.opus',
-    ]) {
-      final dart = await readTrackMetadata(_fixture(name));
-      final rust = (await readTrackFile(_fixture(name))).metadata;
-      // The old Dart MP3 reader (package:dart_tags) leaves the ID3 string
-      // terminator on: 'Title\x00'. Rust doesn't; compare without it.
-      String? clean(String? s) => s?.replaceAll(RegExp(r'\x00+$'), '');
-      expect(rust.title, clean(dart.title), reason: '$name title');
-      expect(rust.artist, clean(dart.artist), reason: '$name artist');
-      expect(rust.album, clean(dart.album), reason: '$name album');
-      expect(
-        rust.albumArtist,
-        clean(dart.albumArtist),
-        reason: '$name album artist',
-      );
-      expect(rust.genre, clean(dart.genre), reason: '$name genre');
-      expect(rust.year, dart.year, reason: '$name year');
-      expect(rust.trackNumber, dart.trackNumber, reason: '$name track');
-    }
   });
 
   test('the Dart path also finds the .lrc file and folder cover', () async {

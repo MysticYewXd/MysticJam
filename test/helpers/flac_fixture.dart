@@ -3,9 +3,9 @@ import 'dart:typed_data';
 
 /// Builds a minimal but structurally valid FLAC file holding just the given
 /// Vorbis comments ("KEY=value" strings) — a STREAMINFO block followed by a
-/// last VORBIS_COMMENT block, no audio frames. Enough for
-/// readFlacMetadata()/the scanner to read real tags from a real file on
-/// disk, which untagged garbage bytes can't exercise.
+/// last VORBIS_COMMENT block, no audio frames. Enough for the reader and
+/// the scanner to read real tags from a real file on disk, which untagged
+/// garbage bytes can't exercise.
 ///
 /// Framing per the FLAC spec: each metadata block is a 1-byte header (last-
 /// block flag in the top bit, block type in the low 7) plus a 3-byte

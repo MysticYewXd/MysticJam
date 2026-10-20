@@ -225,14 +225,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.1.9"
-  dart_tags:
-    dependency: "direct main"
-    description:
-      name: dart_tags
-      sha256: "2dbe297845ff979581b404bf6fac9278466cecac20b8e5ae3c3d30a46f418632"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.4.1"
   dbus:
     dependency: "direct main"
     description:
@@ -1004,14 +996,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.2"
-  utf_convert:
-    dependency: transitive
-    description:
-      name: utf_convert
-      sha256: c9f84e1165735eb13f643cbaace89a34e72db5f9f224f0ffa8931b6f58aa56fe
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.10.0+1"
   uuid:
     dependency: transitive
     description:

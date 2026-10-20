@@ -68,9 +68,9 @@ enum _IndexOutcome { added, unchanged, removed, failed }
 
 /// Indexes supported media files into the library — either by walking a
 /// folder tree, or from an explicit list of individually-picked files.
-/// Reads real tags (ID3/FLAC, see core/library/metadata/) where a reader
-/// exists for the format; falls back to the filename for title otherwise,
-/// same as before this feature existed.
+/// Reads tags, cover art and lyrics through readTrackFile (Rust, with a
+/// Dart reader for WMA); falls back to the filename for the title when a
+/// file has none.
 class LibraryScanner {
   final LibraryRepository repository;
 

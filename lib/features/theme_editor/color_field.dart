@@ -4,10 +4,7 @@ import '../../core/theme/theme_model.dart';
 
 /// A labelled color swatch that opens a small picker dialog on tap — a
 /// hand-rolled RGB-sliders + hex-input picker rather than a new dependency,
-/// since this project deliberately avoids native-toolchain-requiring
-/// packages (see project notes on why dart_tags/pure-Dart parsing was
-/// chosen over Rust-based alternatives — the same reasoning applies here:
-/// keep the dependency surface minimal).
+/// to keep the dependency surface minimal.
 class ColorField extends StatelessWidget {
   final String label;
   final Color value;
