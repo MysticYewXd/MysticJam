@@ -269,6 +269,21 @@ class LibraryRepository {
     if (track?.albumId != null) await _deleteAlbumIfEmpty(track!.albumId!);
   }
 
+  /// Removes every album with no tracks left, except the Unknown Album
+  /// bucket (same rule as [_deleteAlbumIfEmpty]). A rescan moves a song to a
+  /// new album when its tags changed, and the album it left would otherwise
+  /// stay behind as an empty row. Returns how many albums were removed.
+  Future<int> deleteEmptyAlbums() {
+    return (db.delete(db.albums)..where(
+          (a) =>
+              notExistsQuery(
+                db.select(db.tracks)..where((t) => t.albumId.equalsExp(a.id)),
+              ) &
+              a.groupKey.equals(unknownAlbumGroupKey).not(),
+        ))
+        .go();
+  }
+
   /// Removes an album row once its last track is gone — otherwise deleting
   /// every song from an album would leave an empty, permanently-orphaned
   /// row behind. Never touches the shared Unknown Album bucket: an "empty"

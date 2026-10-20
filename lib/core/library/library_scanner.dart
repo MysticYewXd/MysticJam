@@ -319,6 +319,8 @@ class LibraryScanner {
       );
       if (wasCancelled) break;
     }
+    // Even after a cancel: songs may already have moved to new albums.
+    if (forceRescan) await repository.deleteEmptyAlbums();
 
     return ScanResult(
       allPaths,
@@ -366,6 +368,8 @@ class LibraryScanner {
       );
     }
 
+    if (forceRescan) await repository.deleteEmptyAlbums();
+
     return ScanResult(
       supported,
       added,
@@ -407,6 +411,10 @@ class LibraryScanner {
         },
       );
     }
+
+    // Songs whose tags changed have moved to other albums; drop the albums
+    // they left empty (even after a cancel).
+    await repository.deleteEmptyAlbums();
 
     return RefreshResult(
       processed: processed,

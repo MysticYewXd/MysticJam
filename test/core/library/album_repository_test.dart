@@ -187,6 +187,26 @@ void main() {
     );
   });
 
+  group('deleteEmptyAlbums', () {
+    Future<List<String>> albumTitles() async =>
+        [for (final a in await db.select(db.albums).get()) a.title]..sort();
+
+    test('removes albums without songs and keeps the rest', () async {
+      await addTrack(path: '/kept.flac', album: 'Kept');
+      await repo.findOrCreateAlbum(albumKeyFor(album: 'Empty'));
+      await repo.findOrCreateAlbum(albumKeyFor(album: 'Also Empty'));
+
+      expect(await repo.deleteEmptyAlbums(), 2);
+      expect(await albumTitles(), ['Kept']);
+    });
+
+    test('never removes the Unknown Album bucket', () async {
+      await repo.findOrCreateAlbum(albumKeyFor(album: null));
+      expect(await repo.deleteEmptyAlbums(), 0);
+      expect(await albumTitles(), [unknownAlbumTitle]);
+    });
+  });
+
   group('deleteTrack orphan cleanup', () {
     test('deletes the album once its last track is gone', () async {
       final id = await addTrack(path: '/only.flac', album: 'Solo');

@@ -260,5 +260,68 @@ void main() {
         expect(after.coverArtPath, firstCover);
       },
     );
+
+    group('after a refresh moves songs to another album', () {
+      Future<List<String>> albumRows() async => [
+        for (final a in await db.select(db.albums).get())
+          '${a.title} / ${a.artist}',
+      ]..sort();
+
+      test('the album a retagged song left is removed', () async {
+        final path = write('a.flac', ['TITLE=A', 'ALBUM=Old', 'ARTIST=X']);
+        await scanner.scanDirectory(musicDir.path);
+        expect(await albumRows(), ['Old / X']);
+
+        write('a.flac', ['TITLE=A', 'ALBUM=New', 'ARTIST=X']);
+        await scanner.refreshAllMetadata();
+
+        expect(await albumRows(), ['New / X']);
+        expect((await trackAt(path)).albumId, isNotNull);
+      });
+
+      test('joined album artists leave one album, not two', () async {
+        // The user's BULLY case: one file says "Kanye West, Ye", the other
+        // used to be stored under "Ye" alone; after a refresh both are
+        // "Kanye West, Ye" (several values joined) and only one row stays.
+        write('a.flac', ['ALBUM=BULLY', 'ALBUMARTIST=Kanye West, Ye']);
+        write('b.flac', ['ALBUM=BULLY', 'ALBUMARTIST=Ye']);
+        await scanner.scanDirectory(musicDir.path);
+        expect(await albumRows(), hasLength(2));
+
+        write('b.flac', [
+          'ALBUM=BULLY',
+          'ALBUMARTIST=Kanye West',
+          'ALBUMARTIST=Ye',
+        ]);
+        await scanner.refreshAllMetadata();
+
+        expect(await albumRows(), ['BULLY / Kanye West, Ye']);
+      });
+
+      test('a cancelled refresh still cleans up what it moved', () async {
+        write('a.flac', ['TITLE=A', 'ALBUM=Old']);
+        write('b.flac', ['TITLE=B', 'ALBUM=Other']);
+        await scanner.scanDirectory(musicDir.path);
+
+        write('a.flac', ['TITLE=A', 'ALBUM=New']);
+        final token = ScanCancellationToken();
+        final result = await scanner.refreshAllMetadata(
+          cancellationToken: token,
+          onProgress: (done, _) {
+            if (done == 1) token.cancel();
+          },
+        );
+
+        expect(result.wasCancelled, isTrue);
+        expect(await albumRows(), ['New / null', 'Other / null']);
+      });
+
+      test('a normal scan leaves albums alone', () async {
+        await repo.findOrCreateAlbum(albumKeyFor(album: 'Empty'));
+        write('a.flac', ['TITLE=A', 'ALBUM=Real']);
+        await scanner.scanDirectory(musicDir.path);
+        expect(await albumRows(), ['Empty / null', 'Real / null']);
+      });
+    });
   });
 }
