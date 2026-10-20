@@ -352,29 +352,23 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
     final controller = ref.read(playbackControllerProvider.notifier);
     final track = playback.currentTrack;
 
-    // New album → new entrance. Keyed on the album (falling back to the art
-    // path) so skipping songs within one album doesn't replay it.
+    // New album → new entrance (which also gives the disc its spin kick).
+    // Keyed on the album alone, never the cover file: the scanner saves each
+    // song's cover separately, so the path differs for every song, and
+    // keying on it replayed the entrance on every skip. Within an album the
+    // disc just keeps turning.
     ref.listen<String?>(
       playbackControllerProvider.select((s) {
         final t = s.currentTrack;
         if (t == null) return null;
-        return '${t.albumId ?? t.album}|${t.albumArtPath}';
+        // Tracks without an album id fall back to their album tag.
+        return t.albumId != null ? 'id:${t.albumId}' : 'tag:${t.album ?? ''}';
       }),
       (prev, next) {
         if (next == null || prev == next) return;
         _startAlbumTransition(
           ref.read(playbackControllerProvider).currentTrack?.albumArtPath,
         );
-      },
-    );
-    // Every track change nudges the disc, album or not.
-    ref.listen<int?>(
-      playbackControllerProvider.select((s) => s.currentTrack?.id),
-      (prev, next) {
-        if (prev != null && next != null && prev != next && !_reduceMotion) {
-          _speed += 3;
-          _wake();
-        }
       },
     );
     ref.listen<bool>(

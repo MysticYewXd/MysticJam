@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -327,6 +328,85 @@ void main() {
       await _pump(tester, const PlaybackState());
       await tester.pumpAndSettle();
       expect(bar, findsNothing);
+    });
+  });
+
+  group('album entrance', () {
+    /// A song on album [album]; like the real scanner, every song has its
+    /// own cover file. Those files don't exist here, which makes the
+    /// entrance the "soft" one: a blur over the whole player.
+    Track song(int id, int? album, {String? tag}) => _track(id).copyWith(
+      albumId: Value(album),
+      album: Value(tag ?? 'Record'),
+      albumArtPath: Value('/nowhere/$id.art'),
+    );
+
+    PlaybackState playing(Track t, List<Track> queue) => PlaybackState(
+      currentTrack: t,
+      queue: queue,
+      order: [for (var i = 0; i < queue.length; i++) i],
+      orderIndex: queue.indexOf(t),
+      duration: const Duration(minutes: 3),
+    );
+
+    /// Lets the cover-mood lookup (real file I/O) finish, then starts any
+    /// entrance it triggers.
+    Future<void> lookUpCover(WidgetTester tester) async {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    bool blurring(WidgetTester tester) => tester
+        .widgetList<ImageFiltered>(find.byType(ImageFiltered))
+        .any((w) => w.enabled);
+
+    testWidgets('plays when opening, then not when skipping within the album, '
+        'and again for a new album', (tester) async {
+      final a1 = song(1, 10), a2 = song(2, 10), b1 = song(3, 20);
+      final queue = [a1, a2, b1];
+      final fake = await _pump(tester, playing(a1, queue));
+      await lookUpCover(tester);
+      expect(blurring(tester), isTrue, reason: 'opening the album');
+      await tester.pumpAndSettle();
+      expect(blurring(tester), isFalse);
+
+      fake.push(playing(a2, queue));
+      await lookUpCover(tester);
+      expect(blurring(tester), isFalse, reason: 'same album, new cover file');
+      await tester.pump();
+      expect(
+        tester.binding.hasScheduledFrame,
+        isFalse,
+        reason: 'no spin kick or animation: the paused disc stays still',
+      );
+
+      fake.push(playing(b1, queue));
+      await lookUpCover(tester);
+      expect(blurring(tester), isTrue, reason: 'a different album');
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('songs without an album id match by their album tag', (
+      tester,
+    ) async {
+      final x1 = song(1, null, tag: 'Loose'), x2 = song(2, null, tag: 'Loose');
+      final y1 = song(3, null, tag: 'Other');
+      final queue = [x1, x2, y1];
+      final fake = await _pump(tester, playing(x1, queue));
+      await lookUpCover(tester);
+      await tester.pumpAndSettle();
+
+      fake.push(playing(x2, queue));
+      await lookUpCover(tester);
+      expect(blurring(tester), isFalse, reason: 'same album tag');
+
+      fake.push(playing(y1, queue));
+      await lookUpCover(tester);
+      expect(blurring(tester), isTrue, reason: 'different album tag');
+      await tester.pumpAndSettle();
     });
   });
 }
