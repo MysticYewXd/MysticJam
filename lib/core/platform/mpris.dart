@@ -5,6 +5,7 @@ import 'package:dbus/dbus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../playback/playback_controller.dart';
+import 'app_window.dart';
 
 const _busName = 'org.mpris.MediaPlayer2.MysticJam';
 const _rootIface = 'org.mpris.MediaPlayer2';
@@ -15,12 +16,16 @@ const _noTrack = '/org/mpris/MediaPlayer2/TrackList/NoTrack';
 /// desktop's media widget, media keys, lock screen and tools like playerctl
 /// can see and control it. Talks to [PlaybackController] only through the
 /// two accessors it is given, which keeps it testable without a bus.
+/// [onRaise] brings the app window to the front when the desktop asks
+/// (clicking the player in a media widget); without it, CanRaise is false.
 class MprisObject extends DBusObject {
   final PlaybackState Function() _state;
   final PlaybackController Function() _controller;
+  final Future<void> Function()? _raise;
 
-  MprisObject(this._state, this._controller)
-    : super(DBusObjectPath('/org/mpris/MediaPlayer2'));
+  MprisObject(this._state, this._controller, {Future<void> Function()? onRaise})
+    : _raise = onRaise,
+      super(DBusObjectPath('/org/mpris/MediaPlayer2'));
 
   static String loopStatus(PlayerRepeatMode m) => switch (m) {
     PlayerRepeatMode.off => 'None',
@@ -54,7 +59,7 @@ class MprisObject extends DBusObject {
   /// Every property of both interfaces as it is right now.
   Map<String, DBusValue> rootProperties() => {
     'CanQuit': DBusBoolean(false),
-    'CanRaise': DBusBoolean(false),
+    'CanRaise': DBusBoolean(_raise != null),
     'HasTrackList': DBusBoolean(false),
     'Identity': DBusString('MysticJam'),
     'DesktopEntry': DBusString('mysticjam'),
@@ -152,7 +157,11 @@ class MprisObject extends DBusObject {
     final c = _controller();
     final s = _state();
     if (methodCall.interface == _rootIface) {
-      return methodCall.name == 'Raise' || methodCall.name == 'Quit'
+      if (methodCall.name == 'Raise') {
+        await _raise?.call();
+        return DBusMethodSuccessResponse();
+      }
+      return methodCall.name == 'Quit'
           ? DBusMethodSuccessResponse()
           : DBusMethodErrorResponse.unknownMethod();
     }
@@ -211,6 +220,7 @@ final mprisProvider = Provider<void>((ref) {
   final object = MprisObject(
     () => ref.read(playbackControllerProvider),
     () => ref.read(playbackControllerProvider.notifier),
+    onRaise: raiseAppWindow,
   );
   // Throws when there is no session bus address (minimal or headless
   // systems), so it sits behind a guard like the rest of the setup.

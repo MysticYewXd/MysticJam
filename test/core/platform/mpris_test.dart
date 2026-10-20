@@ -240,6 +240,28 @@ void main() {
       );
     });
 
+    test('CanRaise is false without a way to raise the window', () {
+      start(_playing());
+      expect(mpris.rootProperties()['CanRaise'], DBusBoolean(false));
+    });
+
+    test('with one, CanRaise is true and Raise calls it', () async {
+      var raised = 0;
+      fake = _FakeController(_playing());
+      mpris = MprisObject(
+        () => fake.state,
+        () => fake,
+        onRaise: () async => raised++,
+      );
+      expect(mpris.rootProperties()['CanRaise'], DBusBoolean(true));
+      expect(
+        await call('Raise', const [], _root),
+        isA<DBusMethodSuccessResponse>(),
+      );
+      expect(raised, 1);
+      expect(fake.calls, isEmpty, reason: 'playback untouched');
+    });
+
     test('Raise and Quit on the root interface are accepted', () async {
       start(_playing());
       expect(

@@ -13,6 +13,10 @@
 // affects a brand-new engine at startup, not one that's already running).
 static const char* kFileChannelName = "com.musicplayer.music_player/files";
 
+// Method channel Dart uses to ask for the window to be brought to the front
+// — e.g. when the desktop's media widget asks MPRIS to "Raise" the player.
+static const char* kWindowChannelName = "com.musicplayer.music_player/window";
+
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
@@ -23,9 +27,28 @@ struct _MyApplication {
   GtkWindow* window;
   FlView* view;
   FlMethodChannel* file_channel;
+  FlMethodChannel* window_channel;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
+
+// Handles calls on the window channel: "raise" presents the window (on
+// Wayland the compositor may only mark it urgent instead of switching to it,
+// its focus-stealing protection).
+static void window_method_cb(FlMethodChannel* channel,
+                             FlMethodCall* method_call, gpointer user_data) {
+  MyApplication* self = MY_APPLICATION(user_data);
+  g_autoptr(FlMethodResponse) response = nullptr;
+  if (g_strcmp0(fl_method_call_get_name(method_call), "raise") == 0) {
+    if (self->window != nullptr) {
+      gtk_window_present(self->window);
+    }
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+  } else {
+    response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
+  }
+  fl_method_call_respond(method_call, response, nullptr);
+}
 
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
@@ -106,6 +129,12 @@ static void my_application_ensure_window(MyApplication* self) {
   self->file_channel = fl_method_channel_new(
       fl_engine_get_binary_messenger(fl_view_get_engine(view)),
       kFileChannelName, FL_METHOD_CODEC(fl_standard_method_codec_new()));
+
+  self->window_channel = fl_method_channel_new(
+      fl_engine_get_binary_messenger(fl_view_get_engine(view)),
+      kWindowChannelName, FL_METHOD_CODEC(fl_standard_method_codec_new()));
+  fl_method_channel_set_method_call_handler(self->window_channel,
+                                            window_method_cb, self, nullptr);
 }
 
 // Implements GApplication::activate.
@@ -218,6 +247,7 @@ static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
   g_clear_object(&self->file_channel);
+  g_clear_object(&self->window_channel);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 
