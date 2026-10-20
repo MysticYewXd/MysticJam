@@ -1,0 +1,59 @@
+name: Build Windows
+
+on:
+  # The "Run workflow" button in the repo's Actions tab.
+  workflow_dispatch:
+  # Also builds and attaches the zip to the release when you push a tag
+  # like v0.1.0.
+  push:
+    tags: ['v*']
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write   # needed to attach the zip to a release
+    steps:
+      - uses: actions/checkout@v4
+
+      # The library scanner is a Rust crate (rust/), compiled into the app
+      # by the Flutter build.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # Same Flutter version the app is developed with.
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+
+      - run: flutter --version
+
+      - run: flutter pub get
+
+      - name: Build
+        # The permission_handler_windows plugin still uses the deprecated
+        # <experimental/coroutine> header; newer MSVC (on windows-latest)
+        # treats that as a hard error rather than a warning. CL is read
+        # automatically by cl.exe as extra command-line options, so this
+        # silences just that one deprecation instead of patching the plugin.
+        env:
+          CL: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
+        run: flutter build windows --release
+
+      - name: Zip the app
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath MysticJam-windows-x64.zip
+
+      # Download it from the bottom of the workflow run's page.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MysticJam-windows-x64
+          path: MysticJam-windows-x64.zip
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: MysticJam-windows-x64.zip
