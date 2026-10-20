@@ -4,10 +4,11 @@ import 'package:volume_controller/volume_controller.dart';
 
 import 'system_volume_controller.dart';
 
-/// Android implementation via the `volume_controller` plugin, which talks to
-/// AudioManager's STREAM_MUSIC directly — the real system media volume.
-class AndroidSystemVolumeController implements SystemVolumeController {
-  AndroidSystemVolumeController() {
+/// Android and Windows implementation via the `volume_controller` plugin,
+/// which talks to the OS directly (Android's AudioManager STREAM_MUSIC,
+/// Windows' default audio endpoint) — the real system media volume.
+class PluginSystemVolumeController implements SystemVolumeController {
+  PluginSystemVolumeController() {
     // Don't pop the OS volume HUD every time the in-app slider moves.
     VolumeController.instance.showSystemUI = false;
   }
