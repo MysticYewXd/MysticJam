@@ -125,6 +125,11 @@ class BenchmarkReport {
 
   /// Time to walk the folder and find the supported files.
   final int walkMs;
+
+  /// Reading every file one at a time, and in parallel batches of 32 (as
+  /// the scanner does) — the parallel speed-up on its own, no database.
+  final int sequentialReadMs;
+  final int parallelReadMs;
   final Map<String, FormatTiming> formats;
   final List<FileSnapshot> snapshot;
   final List<String> failedPaths;
@@ -134,6 +139,8 @@ class BenchmarkReport {
     required this.cpuCount,
     required this.fullScanMs,
     required this.walkMs,
+    this.sequentialReadMs = 0,
+    this.parallelReadMs = 0,
     required this.formats,
     required this.snapshot,
     required this.failedPaths,
@@ -151,6 +158,8 @@ class BenchmarkReport {
     'cpuCount': cpuCount,
     'fullScanMs': fullScanMs,
     'walkMs': walkMs,
+    'sequentialReadMs': sequentialReadMs,
+    'parallelReadMs': parallelReadMs,
     'formats': {for (final e in formats.entries) e.key: e.value.toJson()},
     'files': snapshot.length,
     'failed': failedPaths,
@@ -169,6 +178,10 @@ class BenchmarkReport {
       ..writeln('  files: ${snapshot.length}  (failed: ${failedPaths.length})')
       ..writeln('  full scan runs (ms): ${fullScanMs.join(', ')}')
       ..writeln('  folder walk (ms): $walkMs')
+      ..writeln(
+        '  reading all files (ms): one at a time $sequentialReadMs, '
+        'parallel $parallelReadMs (${Platform.numberOfProcessors} cores)',
+      )
       ..writeln('  reading files by format (tags, art, lyrics):');
     for (final e in formats.entries) {
       final f = e.value;
@@ -229,6 +242,18 @@ Future<BenchmarkReport> runBenchmark(String musicDir, {int runs = 3}) async {
       formats[e.key] = FormatTiming(e.value.length, sw.elapsedMilliseconds);
     }
 
+    // All files, one at a time vs in parallel batches.
+    final sequential = Stopwatch()..start();
+    for (final f in files) {
+      await readTrackFile(f);
+    }
+    sequential.stop();
+    final parallel = Stopwatch()..start();
+    for (var i = 0; i < files.length; i += 32) {
+      await readTrackFiles(files.sublist(i, (i + 32).clamp(0, files.length)));
+    }
+    parallel.stop();
+
     // Full scans through the real scanner.
     final scanMs = <int>[];
     late List<FileSnapshot> snapshot;
@@ -255,6 +280,8 @@ Future<BenchmarkReport> runBenchmark(String musicDir, {int runs = 3}) async {
       cpuCount: Platform.numberOfProcessors,
       fullScanMs: scanMs,
       walkMs: walk.elapsedMilliseconds,
+      sequentialReadMs: sequential.elapsedMilliseconds,
+      parallelReadMs: parallel.elapsedMilliseconds,
       formats: formats,
       snapshot: snapshot,
       failedPaths: failed,

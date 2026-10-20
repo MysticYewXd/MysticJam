@@ -13,6 +13,12 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 Future<TrackFile> readTrackFile({required String path}) =>
     RustLib.instance.api.crateApiTrackReadTrackFile(path: path);
 
+/// Reads many files at once, spread across all CPU cores. Results come back
+/// in the same order as `paths`, one per path; a failure affects only its
+/// own file.
+Future<List<TrackFileResult>> readTrackFiles({required List<String> paths}) =>
+    RustLib.instance.api.crateApiTrackReadTrackFiles(paths: paths);
+
 /// Whether lyrics text is LRC-style synced lyrics, for lyrics the Dart
 /// readers find (WMA).
 bool isSyncedLyrics({required String text}) =>
@@ -94,4 +100,26 @@ class TrackFile {
           lyrics == other.lyrics &&
           syncedLyrics == other.syncedLyrics &&
           artwork == other.artwork;
+}
+
+/// One file's result from [read_track_files]: `file`, or the `error` that
+/// stopped it being read.
+class TrackFileResult {
+  final String path;
+  final TrackFile? file;
+  final String? error;
+
+  const TrackFileResult({required this.path, this.file, this.error});
+
+  @override
+  int get hashCode => path.hashCode ^ file.hashCode ^ error.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TrackFileResult &&
+          runtimeType == other.runtimeType &&
+          path == other.path &&
+          file == other.file &&
+          error == other.error;
 }

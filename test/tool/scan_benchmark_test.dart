@@ -60,6 +60,7 @@ void main() {
     expect(report.fullScanMs, hasLength(2));
     expect(report.formats.keys, ['flac']);
     expect(report.formats['flac']!.files, 3);
+    expect(report.summary(), contains('reading all files'));
     expect(report.snapshot, hasLength(3));
     expect(report.failedPaths, isEmpty);
   });

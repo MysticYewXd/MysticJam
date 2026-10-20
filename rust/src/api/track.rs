@@ -11,6 +11,7 @@ use lofty::id3::v2::{Frame, Id3v2Tag, SynchronizedTextFrame, TimestampFormat};
 use lofty::prelude::ItemKey;
 use lofty::probe::Probe;
 use lofty::tag::Tag;
+use rayon::prelude::*;
 
 use crate::{lyrics, sidecar, tags};
 
@@ -39,6 +40,35 @@ pub struct TrackFile {
 /// returned as a message; the Dart side then falls back to its own readers.
 pub fn read_track_file(path: String) -> Result<TrackFile, String> {
     read(Path::new(&path))
+}
+
+/// One file's result from [read_track_files]: `file`, or the `error` that
+/// stopped it being read.
+pub struct TrackFileResult {
+    pub path: String,
+    pub file: Option<TrackFile>,
+    pub error: Option<String>,
+}
+
+/// Reads many files at once, spread across all CPU cores. Results come back
+/// in the same order as `paths`, one per path; a failure affects only its
+/// own file.
+pub fn read_track_files(paths: Vec<String>) -> Vec<TrackFileResult> {
+    paths
+        .into_par_iter()
+        .map(|path| match read(Path::new(&path)) {
+            Ok(file) => TrackFileResult {
+                path,
+                file: Some(file),
+                error: None,
+            },
+            Err(error) => TrackFileResult {
+                path,
+                file: None,
+                error: Some(error),
+            },
+        })
+        .collect()
 }
 
 /// Whether lyrics text is LRC-style synced lyrics, for lyrics the Dart

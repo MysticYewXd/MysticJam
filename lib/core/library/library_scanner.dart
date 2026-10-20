@@ -8,6 +8,7 @@ import '../audio/format_support.dart';
 import 'album_grouping.dart';
 import 'database.dart';
 import 'library_repository.dart';
+import '../../src/rust/api/scan.dart' as rust;
 import 'track_file_reader.dart';
 
 /// How many files' worth of database writes get wrapped into one
@@ -20,6 +21,12 @@ import 'track_file_reader.dart';
 /// progress still has to finish, but 200 files' worth is a bounded, short
 /// wait either way.
 const _batchSize = 200;
+
+/// How many files are read in parallel (in Rust, across all CPU cores)
+/// before being saved. Much smaller than [_batchSize] because a read result
+/// holds the cover art in memory, often hundreds of KB per song; 32 keeps
+/// every core busy while capping that at a few tens of MB.
+const _readChunkSize = 32;
 
 /// Lets a caller ask an in-progress scan to stop early — checked once per
 /// file, so cancellation takes effect within roughly one file's processing
@@ -69,29 +76,82 @@ class LibraryScanner {
 
   LibraryScanner(this.repository);
 
-  /// Indexes [path]. Normally skips files already in the library — pass
-  /// [forceRescan] to re-parse and overwrite an existing entry instead (used
-  /// by "Refresh Metadata" to pick up tags for tracks indexed before this
-  /// feature existed, or before a given format had a reader).
+  /// Indexes [batch] inside one database transaction. Normally skips files
+  /// already in the library — pass [forceRescan] to re-parse and overwrite
+  /// existing entries instead (used by "Refresh Metadata"), which also
+  /// removes tracks whose file is gone.
+  ///
+  /// Files are read [_readChunkSize] at a time, in parallel (see
+  /// readTrackFiles), then saved one by one; [onIndexed] runs after each
+  /// file is saved. [cancellationToken] is checked before every file, so a
+  /// cancel requested from inside [onIndexed] takes effect at the next one.
+  /// Returns true if it was cancelled.
   ///
   /// Never throws — one corrupt/unreadable file must not abort a whole
-  /// batch scan or refresh; the outcome is reported instead (see
-  /// [_IndexOutcome.failed]) rather than silently discarded.
-  Future<_IndexOutcome> _indexFile(
-    String path, {
-    bool forceRescan = false,
+  /// batch scan or refresh; its outcome is reported as
+  /// [_IndexOutcome.failed] instead.
+  Future<bool> _indexBatch(
+    List<String> batch, {
+    required bool forceRescan,
+    required ScanCancellationToken? cancellationToken,
+    required void Function(String path, _IndexOutcome outcome) onIndexed,
+  }) async {
+    var cancelled = false;
+    bool stop() => cancelled = cancellationToken?.isCancelled ?? false;
+    await repository.db.transaction(() async {
+      for (var i = 0; i < batch.length; i += _readChunkSize) {
+        if (stop()) return;
+        final chunk = batch.sublist(
+          i,
+          (i + _readChunkSize).clamp(0, batch.length),
+        );
+
+        // Work out what needs reading before reading anything.
+        final decided = <String, _IndexOutcome>{};
+        final alreadyIndexed = <String>{};
+        final toRead = <String>[];
+        for (final path in chunk) {
+          try {
+            final exists = await repository.trackExists(path);
+            if (exists && !forceRescan) {
+              decided[path] = _IndexOutcome.unchanged;
+            } else if (forceRescan && !await File(path).exists()) {
+              await repository.deleteTrackByPath(path);
+              decided[path] = _IndexOutcome.removed;
+            } else {
+              if (exists) alreadyIndexed.add(path);
+              toRead.add(path);
+            }
+          } catch (_) {
+            decided[path] = _IndexOutcome.failed;
+          }
+        }
+
+        final read = await readTrackFiles(toRead);
+        for (final path in chunk) {
+          if (stop()) return;
+          final outcome =
+              decided[path] ??
+              await _store(
+                path,
+                read[path]!,
+                alreadyIndexed: alreadyIndexed.contains(path),
+              );
+          onIndexed(path, outcome);
+        }
+      }
+    });
+    return cancelled;
+  }
+
+  /// Saves one read file: its album, track row and cover art.
+  Future<_IndexOutcome> _store(
+    String path,
+    TrackFileData file, {
+    required bool alreadyIndexed,
   }) async {
     try {
-      final alreadyIndexed = await repository.trackExists(path);
-      if (alreadyIndexed && !forceRescan) return _IndexOutcome.unchanged;
-
-      if (forceRescan && !await File(path).exists()) {
-        await repository.deleteTrackByPath(path);
-        return _IndexOutcome.removed;
-      }
-
       final ext = p.extension(path).replaceFirst('.', '').toLowerCase();
-      final file = await readTrackFile(path);
       final metadata = file.metadata;
       final title = metadata.title ?? p.basenameWithoutExtension(path);
       final syncedLyrics = file.syncedLyrics;
@@ -224,51 +284,41 @@ class LibraryScanner {
     var added = 0;
     var processed = 0;
     var wasCancelled = false;
-    var batch = <String>[];
 
-    Future<void> flushBatch() async {
-      if (batch.isEmpty) return;
-      // Directory listing order is filesystem-dependent; sorting makes
-      // "first-seen wins" (album title casing, cover art) deterministic.
-      batch.sort();
-      await repository.db.transaction(() async {
-        for (final path in batch) {
-          // Checked per-file, not just once per batch: onProgress (where a
-          // caller's cancellationToken.cancel() actually gets called) fires
-          // from inside this same loop, and a batch can hold up to
-          // _batchSize files — a between-batches-only check would let an
-          // entire small scan finish before a cancellation requested during
-          // its own progress callback ever took effect.
-          if (cancellationToken?.isCancelled ?? false) {
-            wasCancelled = true;
-            return;
-          }
-          final outcome = await _indexFile(path, forceRescan: forceRescan);
+    // Rust walks the folder and streams paths in batches (sorted by name,
+    // so "first-seen wins" for album title casing and cover art is
+    // deterministic). Leaving the loop cancels the stream, which stops the
+    // walk.
+    final batches = rust.walkMediaFiles(
+      root: directoryPath,
+      extensions: allSupportedExtensions.toList(),
+      batchSize: _batchSize,
+    );
+    await for (final found in batches) {
+      if (cancellationToken?.isCancelled ?? false) {
+        wasCancelled = true;
+        break;
+      }
+      // Duplicate handling: a case-insensitive filesystem quirk could
+      // otherwise surface the same path twice in one walk.
+      final batch = [
+        for (final path in found)
+          if (seenPaths.add(path)) path,
+      ];
+      allPaths.addAll(batch);
+      wasCancelled = await _indexBatch(
+        batch,
+        forceRescan: forceRescan,
+        cancellationToken: cancellationToken,
+        onIndexed: (path, outcome) {
           if (outcome == _IndexOutcome.added) added++;
           if (outcome == _IndexOutcome.failed) failedPaths.add(path);
           processed++;
           onProgress?.call(processed);
-        }
-      });
-      batch = [];
+        },
+      );
+      if (wasCancelled) break;
     }
-
-    await for (final entity in dir.list(recursive: true, followLinks: false)) {
-      if (wasCancelled || (cancellationToken?.isCancelled ?? false)) {
-        wasCancelled = true;
-        break;
-      }
-      if (entity is! File) continue;
-      if (!isSupportedMediaFile(entity.path)) continue;
-      // Duplicate handling: a symlink cycle or a case-insensitive filesystem
-      // quirk could otherwise surface the same real path twice in one walk.
-      if (!seenPaths.add(entity.path)) continue;
-
-      allPaths.add(entity.path);
-      batch.add(entity.path);
-      if (batch.length >= _batchSize) await flushBatch();
-    }
-    if (!wasCancelled) await flushBatch();
 
     return ScanResult(
       allPaths,
@@ -303,21 +353,17 @@ class LibraryScanner {
         wasCancelled = true;
         break;
       }
-      final batch = supported.skip(i).take(_batchSize);
-      await repository.db.transaction(() async {
-        for (final path in batch) {
-          // See scanDirectory's flushBatch for why this is checked per-file.
-          if (cancellationToken?.isCancelled ?? false) {
-            wasCancelled = true;
-            return;
-          }
-          final outcome = await _indexFile(path, forceRescan: forceRescan);
+      wasCancelled = await _indexBatch(
+        supported.skip(i).take(_batchSize).toList(),
+        forceRescan: forceRescan,
+        cancellationToken: cancellationToken,
+        onIndexed: (path, outcome) {
           if (outcome == _IndexOutcome.added) added++;
           if (outcome == _IndexOutcome.failed) failedPaths.add(path);
           processed++;
           onProgress?.call(processed);
-        }
-      });
+        },
+      );
     }
 
     return ScanResult(
@@ -350,20 +396,16 @@ class LibraryScanner {
         wasCancelled = true;
         break;
       }
-      final batch = paths.skip(i).take(_batchSize);
-      await repository.db.transaction(() async {
-        for (final path in batch) {
-          // See scanDirectory's flushBatch for why this is checked per-file.
-          if (cancellationToken?.isCancelled ?? false) {
-            wasCancelled = true;
-            return;
-          }
-          final outcome = await _indexFile(path, forceRescan: true);
+      wasCancelled = await _indexBatch(
+        paths.skip(i).take(_batchSize).toList(),
+        forceRescan: true,
+        cancellationToken: cancellationToken,
+        onIndexed: (path, outcome) {
           if (outcome == _IndexOutcome.removed) removed++;
           processed++;
           onProgress?.call(processed, paths.length);
-        }
-      });
+        },
+      );
     }
 
     return RefreshResult(

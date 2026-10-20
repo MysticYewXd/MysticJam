@@ -43,31 +43,58 @@ class TrackFileData {
 /// the rest and for any file Rust fails on (so nothing that read before
 /// stops reading). Never throws.
 Future<TrackFileData> readTrackFile(String path) async {
-  final ext = p.extension(path).replaceFirst('.', '').toLowerCase();
-  if (_rustFormats.contains(ext)) {
+  if (_isRustFormat(path)) {
     try {
-      final f = await rust.readTrackFile(path: path);
-      return TrackFileData(
-        ParsedMetadata(
-          title: f.title,
-          artist: f.artist,
-          album: f.album,
-          albumArtist: f.albumArtist,
-          genre: f.genre,
-          year: f.year,
-          trackNumber: f.trackNumber,
-          durationMs: f.durationMs,
-          lyrics: f.lyrics,
-          artwork: f.artwork,
-        ),
-        f.syncedLyrics,
-      );
+      return _fromRust(await rust.readTrackFile(path: path));
     } catch (_) {
       // Unsupported or damaged in a way lofty rejects: try the Dart reader.
     }
   }
   return _readWithDart(path);
 }
+
+/// [readTrackFile] for many files at once: the Rust-format ones are read in
+/// one call, in parallel across all CPU cores; the rest, and any Rust
+/// couldn't read, go through the Dart readers. One entry per path. Never
+/// throws.
+Future<Map<String, TrackFileData>> readTrackFiles(List<String> paths) async {
+  final results = <String, TrackFileData>{};
+  final viaRust = paths.where(_isRustFormat).toList();
+  if (viaRust.isNotEmpty) {
+    try {
+      for (final r in await rust.readTrackFiles(paths: viaRust)) {
+        final file = r.file;
+        if (file != null) results[r.path] = _fromRust(file);
+      }
+    } catch (_) {
+      // Rust unavailable: everything falls through to the Dart readers.
+    }
+  }
+  for (final path in paths) {
+    if (!results.containsKey(path)) results[path] = await _readWithDart(path);
+  }
+  return results;
+}
+
+bool _isRustFormat(String path) => _rustFormats.contains(
+  p.extension(path).replaceFirst('.', '').toLowerCase(),
+);
+
+TrackFileData _fromRust(rust.TrackFile f) => TrackFileData(
+  ParsedMetadata(
+    title: f.title,
+    artist: f.artist,
+    album: f.album,
+    albumArtist: f.albumArtist,
+    genre: f.genre,
+    year: f.year,
+    trackNumber: f.trackNumber,
+    durationMs: f.durationMs,
+    lyrics: f.lyrics,
+    artwork: f.artwork,
+  ),
+  f.syncedLyrics,
+);
 
 Future<TrackFileData> _readWithDart(String path) async {
   final m = await readTrackMetadata(path);

@@ -300,3 +300,41 @@ fn several_artist_values_are_joined() {
     assert_eq!(f.album_artist.as_deref(), Some("Kanye West, Ye"));
     fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn many_files_read_in_parallel_keep_their_order() {
+    let names = [
+        "tagged.flac",
+        "tagged.ogg",
+        "missing.mp3",
+        "tagged.opus",
+        "tagged.m4a",
+    ];
+    let paths: Vec<String> = names
+        .iter()
+        .map(|n| fixture(n).to_string_lossy().into_owned())
+        .collect();
+    let results = super::read_track_files(paths.clone());
+
+    assert_eq!(
+        results.iter().map(|r| r.path.clone()).collect::<Vec<_>>(),
+        paths,
+        "same order as asked"
+    );
+    for (r, name) in results.iter().zip(names) {
+        if name == "missing.mp3" {
+            assert!(r.file.is_none() && r.error.is_some(), "only this one fails");
+        } else {
+            let f = r
+                .file
+                .as_ref()
+                .unwrap_or_else(|| panic!("{name}: {:?}", r.error));
+            assert_eq!(
+                f.title,
+                read(&fixture(name)).title,
+                "{name} same as one-at-a-time"
+            );
+            assert_eq!(f.lyrics.as_deref(), Some(PLAIN), "{name}");
+        }
+    }
+}
