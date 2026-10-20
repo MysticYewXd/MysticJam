@@ -8,6 +8,7 @@ import '../audio/audio_engine_provider.dart';
 import '../audio/system_volume_provider.dart';
 import '../library/database.dart';
 import '../library/library_providers.dart';
+import '../logging/app_log.dart';
 import '../settings/app_settings.dart';
 
 enum PlayerRepeatMode { off, all, one }
@@ -170,6 +171,7 @@ class PlaybackController extends Notifier<PlaybackState> {
     // it as state lets the UI show something instead of a track that just
     // never starts.
     _errorSub = _engine.errorStream.listen((message) {
+      AppLog.warn('playback', 'engine error', {'detail': message});
       state = state.copyWith(errorMessage: () => message);
     });
 

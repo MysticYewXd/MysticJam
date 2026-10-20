@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'package:music_player/core/logging/app_log.dart';
 import 'package:music_player/core/lyrics/lrclib_client.dart';
 
 void main() {
@@ -85,4 +86,51 @@ void main() {
       );
     },
   );
+
+  test('logs the outcome without the artist or title', () async {
+    final lines = <String>[];
+    AppLog.testSink = lines.add;
+    addTearDown(() => AppLog.testSink = null);
+
+    await fetchSyncedLyrics(
+      artist: 'Very Private Artist',
+      title: 'Very Private Title',
+      client: MockClient((_) async => json({'syncedLyrics': '[00:01.00]x'})),
+    );
+    await fetchSyncedLyrics(
+      artist: 'Very Private Artist',
+      title: 'Very Private Title',
+      client: MockClient(
+        (_) async =>
+            throw http.ClientException('offline for Very Private Artist'),
+      ),
+    );
+
+    expect(lines, hasLength(2));
+    expect(lines.join(), contains('lookup hit'));
+    expect(lines.join(), contains('lookup failed'));
+    expect(lines.join(), isNot(contains('Private')));
+  });
+
+  test('an oversized response is rejected instead of stored', () async {
+    final big = 'x' * (301 * 1024);
+    final client = MockClient((_) async => json({'syncedLyrics': big}));
+    final lrc = await fetchSyncedLyrics(
+      artist: 'A',
+      title: 'T',
+      client: client,
+    );
+    expect(lrc, isNull);
+  });
+
+  test('a response just under the limit is accepted', () async {
+    final ok = 'x' * (250 * 1024);
+    final client = MockClient((_) async => json({'syncedLyrics': ok}));
+    final lrc = await fetchSyncedLyrics(
+      artist: 'A',
+      title: 'T',
+      client: client,
+    );
+    expect(lrc, ok);
+  });
 }

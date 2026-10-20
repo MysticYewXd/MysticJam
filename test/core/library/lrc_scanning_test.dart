@@ -9,6 +9,7 @@ import 'package:music_player/core/library/database.dart';
 import 'package:music_player/core/library/library_repository.dart';
 import 'package:music_player/core/library/library_scanner.dart';
 import 'package:music_player/core/library/metadata/lrc_parser.dart';
+import 'package:music_player/core/logging/app_log.dart';
 
 import '../../helpers/flac_fixture.dart';
 import '../../helpers/rust_lib.dart';
@@ -159,4 +160,35 @@ void main() {
       expect(calls, [(1, 1)]);
     },
   );
+
+  test('a scan logs counts and timing but never file names', () async {
+    final lines = <String>[];
+    AppLog.testSink = lines.add;
+    addTearDown(() => AppLog.testSink = null);
+    writeAudio('My Very Private Song.flac');
+
+    await scanner.scanDirectory(musicDir.path);
+
+    final line = lines.singleWhere((l) => l.contains('"tag":"scan"'));
+    expect(line, contains('"added":1'));
+    expect(line, contains('"failed":0'));
+    expect(line, isNot(contains('Private')));
+    expect(line, isNot(contains(musicDir.path)));
+  });
+
+  test('Refresh Metadata logs counts but never file names', () async {
+    writeAudio('Another Private Song.flac');
+    await scanner.scanDirectory(musicDir.path);
+    final lines = <String>[];
+    AppLog.testSink = lines.add;
+    addTearDown(() => AppLog.testSink = null);
+
+    await scanner.refreshAllMetadata();
+
+    final line = lines.singleWhere((l) => l.contains('refresh finished'));
+    expect(line, contains('"processed":1'));
+    expect(line, contains('"removed":0'));
+    expect(line, isNot(contains('Private')));
+    expect(line, isNot(contains(musicDir.path)));
+  });
 }

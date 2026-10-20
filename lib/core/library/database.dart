@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'library_model.dart';
+import '../logging/app_log.dart';
 
 part 'database.g.dart';
 
@@ -22,6 +23,7 @@ class AppDatabase extends _$AppDatabase {
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
     onUpgrade: (m, from, to) async {
+      AppLog.info('db', 'migrating', {'from': from, 'to': to});
       if (from < 2) {
         await m.createTable(playlists);
         await m.createTable(playlistTracks);

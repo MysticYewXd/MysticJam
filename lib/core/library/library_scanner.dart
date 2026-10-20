@@ -9,6 +9,7 @@ import 'album_grouping.dart';
 import 'database.dart';
 import 'library_repository.dart';
 import '../../src/rust/api/scan.dart' as rust;
+import '../logging/app_log.dart';
 import 'track_file_reader.dart';
 
 /// How many files' worth of database writes get wrapped into one
@@ -243,6 +244,10 @@ class LibraryScanner {
       onProgress?.call(i + 1, paths.length);
     }
     await repository.setLyricsForPaths(found);
+    AppLog.info('scan', 'lyrics rescan finished', {
+      'checked': paths.length,
+      'found': found.length,
+    });
     return found.length;
   }
 
@@ -275,6 +280,7 @@ class LibraryScanner {
     ScanCancellationToken? cancellationToken,
     void Function(int processed)? onProgress,
   }) async {
+    final clock = Stopwatch()..start();
     final dir = Directory(directoryPath);
     if (!await dir.exists()) return const ScanResult([], 0);
 
@@ -322,12 +328,29 @@ class LibraryScanner {
     // Even after a cancel: songs may already have moved to new albums.
     if (forceRescan) await repository.deleteEmptyAlbums();
 
-    return ScanResult(
-      allPaths,
-      added,
-      failedPaths: failedPaths,
-      wasCancelled: wasCancelled,
+    return _logged(
+      'folder',
+      clock,
+      ScanResult(
+        allPaths,
+        added,
+        failedPaths: failedPaths,
+        wasCancelled: wasCancelled,
+      ),
     );
+  }
+
+  /// Counts and timing only — never which files (see AppLog).
+  ScanResult _logged(String kind, Stopwatch clock, ScanResult r) {
+    AppLog.info('scan', 'finished', {
+      'kind': kind,
+      'matched': r.allPaths.length,
+      'added': r.addedCount,
+      'failed': r.failedPaths.length,
+      'cancelled': r.wasCancelled,
+      'ms': clock.elapsedMilliseconds,
+    });
+    return r;
   }
 
   /// Indexes an explicit list of individually-picked files (as opposed to
@@ -339,6 +362,7 @@ class LibraryScanner {
     ScanCancellationToken? cancellationToken,
     void Function(int processed)? onProgress,
   }) async {
+    final clock = Stopwatch()..start();
     final supported = <String>[];
     final seenPaths = <String>{};
     for (final path in filePaths.where(isSupportedMediaFile)) {
@@ -370,11 +394,15 @@ class LibraryScanner {
 
     if (forceRescan) await repository.deleteEmptyAlbums();
 
-    return ScanResult(
-      supported,
-      added,
-      failedPaths: failedPaths,
-      wasCancelled: wasCancelled,
+    return _logged(
+      'files',
+      clock,
+      ScanResult(
+        supported,
+        added,
+        failedPaths: failedPaths,
+        wasCancelled: wasCancelled,
+      ),
     );
   }
 
@@ -390,6 +418,7 @@ class LibraryScanner {
     ScanCancellationToken? cancellationToken,
     void Function(int processed, int total)? onProgress,
   }) async {
+    final clock = Stopwatch()..start();
     final paths = await repository.getAllFilePaths();
     var removed = 0;
     var processed = 0;
@@ -414,7 +443,14 @@ class LibraryScanner {
 
     // Songs whose tags changed have moved to other albums; drop the albums
     // they left empty (even after a cancel).
-    await repository.deleteEmptyAlbums();
+    final emptied = await repository.deleteEmptyAlbums();
+    AppLog.info('scan', 'refresh finished', {
+      'processed': processed,
+      'removed': removed,
+      'emptyAlbumsRemoved': emptied,
+      'cancelled': wasCancelled,
+      'ms': clock.elapsedMilliseconds,
+    });
 
     return RefreshResult(
       processed: processed,

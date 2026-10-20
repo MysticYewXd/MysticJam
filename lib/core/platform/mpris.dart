@@ -5,6 +5,7 @@ import 'package:dbus/dbus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../playback/playback_controller.dart';
+import '../logging/app_log.dart';
 import 'app_window.dart';
 
 const _busName = 'org.mpris.MediaPlayer2.MysticJam';
@@ -240,8 +241,13 @@ final mprisProvider = Provider<void>((ref) {
     try {
       await client.registerObject(object);
       final reply = await client.requestName(_busName);
-      if (reply != DBusRequestNameReply.primaryOwner) return;
-    } catch (_) {
+      if (reply != DBusRequestNameReply.primaryOwner) {
+        AppLog.warn('mpris', 'bus name not acquired', {'reply': reply});
+        return;
+      }
+      AppLog.info('mpris', 'registered');
+    } catch (e) {
+      AppLog.warn('mpris', 'unavailable', {'error': e.runtimeType});
       return;
     }
     var last = object.playerProperties();
