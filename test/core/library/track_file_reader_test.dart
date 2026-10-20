@@ -80,6 +80,20 @@ void main() {
     expect(f.metadata.artwork, [9, 9, 9]);
   });
 
+  test('a big folder cover is stored shrunk, on both reading paths', () async {
+    final bigCover = File(_fixture('big_cover.png')).readAsBytesSync();
+    File(p.join(scratch.path, 'cover.png')).writeAsBytesSync(bigCover);
+    for (final name in ['song.wma', 'song.ogg']) {
+      final song = copy('tagged.${name.split('.').last}', name);
+      final art = (await readTrackFile(song)).metadata.artwork!;
+      // Shrunk covers without transparency are re-encoded as JPEG (FF D8),
+      // and are no longer the 2400x1800 original.
+      expect(art.take(2), [0xFF, 0xD8], reason: name);
+      expect(art, isNot(bigCover), reason: name);
+      expect(_jpegSize(art), (1024, 768), reason: name);
+    }
+  });
+
   test('broken files never throw', () async {
     final bad = File(p.join(scratch.path, 'broken.flac'))
       ..writeAsStringSync('not audio');
@@ -89,4 +103,22 @@ void main() {
     final missing = await readTrackFile(p.join(scratch.path, 'gone.mp3'));
     expect(missing.metadata.title, isNull);
   });
+}
+
+/// Width and height from a JPEG's start-of-frame header.
+(int, int) _jpegSize(List<int> b) {
+  var i = 2;
+  while (i + 9 < b.length) {
+    if (b[i] != 0xFF) {
+      i++;
+      continue;
+    }
+    final marker = b[i + 1];
+    final length = (b[i + 2] << 8) | b[i + 3];
+    if (marker >= 0xC0 && marker <= 0xC3) {
+      return ((b[i + 7] << 8) | b[i + 8], (b[i + 5] << 8) | b[i + 6]);
+    }
+    i += 2 + length;
+  }
+  throw StateError('no JPEG frame header');
 }

@@ -29,7 +29,7 @@ const _coverArtExtensions = ['jpg', 'jpeg', 'png'];
 /// Everything the scanner stores from one song file.
 class TrackFileData {
   /// Tags, plain (untimed) embedded lyrics, and cover art — embedded, or a
-  /// `cover.jpg`-style image next to the song.
+  /// `cover.jpg`-style image next to the song — shrunk to at most 1024 px.
   final ParsedMetadata metadata;
 
   /// LRC text: the `.lrc` file next to the song, else timestamped lyrics
@@ -119,7 +119,7 @@ Future<TrackFileData> _readWithDart(String path) async {
       trackNumber: m.trackNumber,
       durationMs: m.durationMs,
       lyrics: plain,
-      artwork: m.artwork ?? await _findFolderCover(path),
+      artwork: await _shrinkCover(m.artwork ?? await _findFolderCover(path)),
     ),
     await _findLrcSidecar(path) ?? embeddedSynced,
   );
@@ -131,6 +131,18 @@ bool _isSynced(String text) {
     return rust.isSyncedLyrics(text: text);
   } catch (_) {
     return false;
+  }
+}
+
+/// The Rust shrink (rust/src/covers.rs, at most 1024 px), so covers found
+/// by the Dart readers are stored the same way; the original if Rust isn't
+/// available.
+Future<Uint8List?> _shrinkCover(Uint8List? bytes) async {
+  if (bytes == null) return null;
+  try {
+    return await rust.shrinkCover(bytes: bytes);
+  } catch (_) {
+    return bytes;
   }
 }
 

@@ -41,6 +41,8 @@ ffmpeg "${q[@]}" "${silence[@]}" -c:a wmav2 -b:a 32k -metadata title="Headers WM
 [by:Tool]
 
 Words here" headers.wma
+# An oversized cover (over 2000 px): shrunk to 1024 px when saved.
+ffmpeg "${q[@]}" -f lavfi -i "color=c=blue:s=2400x1800" -frames:v 1 big_cover.png
 # Untagged bases, tagged by the tests.
 ffmpeg "${q[@]}" -f lavfi -t 0.3 -i "anullsrc=r=8000:cl=mono" -c:a pcm_s16le -map_metadata -1 untagged.wav
 ffmpeg "${q[@]}" "${silence[@]}" -c:a aac -b:a 32k -f adts -map_metadata -1 untagged.aac

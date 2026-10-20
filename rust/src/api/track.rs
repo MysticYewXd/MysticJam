@@ -13,7 +13,7 @@ use lofty::probe::Probe;
 use lofty::tag::Tag;
 use rayon::prelude::*;
 
-use crate::{lyrics, sidecar, tags};
+use crate::{covers, lyrics, sidecar, tags};
 
 /// Everything the scanner stores for one song.
 pub struct TrackFile {
@@ -32,7 +32,8 @@ pub struct TrackFile {
     /// text, or ID3's SYLT frame).
     pub synced_lyrics: Option<String>,
     /// Embedded cover, else a `cover.jpg`/`folder.png`-style image next to
-    /// the song.
+    /// the song — oversized ones shrunk to at most 1024 px on their longest
+    /// side (see covers.rs).
     pub artwork: Option<Vec<u8>>,
 }
 
@@ -69,6 +70,13 @@ pub fn read_track_files(paths: Vec<String>) -> Vec<TrackFileResult> {
             },
         })
         .collect()
+}
+
+/// A cover image to store, for covers the Dart readers find (WMA, folder
+/// images): oversized ones shrunk to at most 1024 px on their longest side,
+/// everything else returned unchanged (see covers.rs).
+pub fn shrink_cover(bytes: Vec<u8>) -> Vec<u8> {
+    covers::shrink_or_keep(bytes)
 }
 
 /// Whether lyrics text is LRC-style synced lyrics, for lyrics the Dart
@@ -144,7 +152,8 @@ fn read(path: &Path) -> Result<TrackFile, String> {
         .iter()
         .find_map(|t| t.pictures().first())
         .map(|p| p.data().to_vec())
-        .or_else(|| sidecar::folder_cover_for(path));
+        .or_else(|| sidecar::folder_cover_for(path))
+        .map(covers::shrink_or_keep);
 
     Ok(TrackFile {
         title: text(ItemKey::TrackTitle),

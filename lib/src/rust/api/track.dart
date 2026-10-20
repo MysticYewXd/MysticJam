@@ -19,6 +19,12 @@ Future<TrackFile> readTrackFile({required String path}) =>
 Future<List<TrackFileResult>> readTrackFiles({required List<String> paths}) =>
     RustLib.instance.api.crateApiTrackReadTrackFiles(paths: paths);
 
+/// A cover image to store, for covers the Dart readers find (WMA, folder
+/// images): oversized ones shrunk to at most 1024 px on their longest side,
+/// everything else returned unchanged (see covers.rs).
+Future<Uint8List> shrinkCover({required List<int> bytes}) =>
+    RustLib.instance.api.crateApiTrackShrinkCover(bytes: bytes);
+
 /// Whether lyrics text is LRC-style synced lyrics, for lyrics the Dart
 /// readers find (WMA).
 bool isSyncedLyrics({required String text}) =>
@@ -53,7 +59,8 @@ class TrackFile {
   final String? syncedLyrics;
 
   /// Embedded cover, else a `cover.jpg`/`folder.png`-style image next to
-  /// the song.
+  /// the song — oversized ones shrunk to at most 1024 px on their longest
+  /// side (see covers.rs).
   final Uint8List? artwork;
 
   const TrackFile({

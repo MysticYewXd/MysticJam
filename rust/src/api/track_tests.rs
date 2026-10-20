@@ -338,3 +338,18 @@ fn many_files_read_in_parallel_keep_their_order() {
         }
     }
 }
+
+#[test]
+fn a_big_cover_is_saved_shrunk() {
+    use image::GenericImageView;
+    let dir = scratch("big_cover");
+    let song = copy("tagged.ogg", &dir, "a.ogg");
+    image::RgbImage::from_pixel(2400, 1800, image::Rgb([200, 30, 30]))
+        .save(dir.join("cover.png"))
+        .unwrap();
+
+    let art = read(&song).artwork.unwrap();
+    let back = image::load_from_memory(&art).unwrap();
+    assert_eq!(back.dimensions(), (1024, 768));
+    fs::remove_dir_all(dir).unwrap();
+}
