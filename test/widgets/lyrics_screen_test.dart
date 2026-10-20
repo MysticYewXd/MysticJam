@@ -7,6 +7,7 @@ import 'package:music_player/core/library/database.dart';
 import 'package:music_player/core/library/library_providers.dart';
 import 'package:music_player/core/playback/playback_controller.dart';
 import 'package:music_player/core/settings/app_settings.dart';
+import 'package:music_player/core/theme/theme_provider.dart';
 import 'package:music_player/features/now_playing/lyrics_screen.dart';
 
 class _FakePlayback extends PlaybackController {
@@ -185,5 +186,54 @@ void main() {
           .first,
     );
     expect(inkWell.onTap, isNull);
+  });
+
+  group('duet lyrics', () {
+    const duet =
+        '[00:01.00]v1: <00:01.00>Main voice\n'
+        '[00:05.00]v2: <00:05.00>Second voice';
+
+    Text lineText(WidgetTester tester, String text) =>
+        tester.widget<Text>(find.text(text));
+
+    testWidgets('the second voice sits opposite, in the accent colour', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(_track(synced: duet), online: () async => null),
+      );
+      await tester.pumpAndSettle();
+      final theme = ProviderScope.containerOf(
+        tester.element(find.byType(LyricsScreen)),
+      ).read(themeProvider);
+
+      final main = lineText(tester, 'Main voice');
+      final second = lineText(tester, 'Second voice');
+      expect(main.textAlign, TextAlign.left);
+      expect(main.style!.color, theme.colors.textPrimary);
+      expect(second.textAlign, TextAlign.right);
+      expect(second.style!.color, theme.colors.accent);
+    });
+
+    testWidgets('with right-aligned lyrics the second voice goes left', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          _track(synced: duet),
+          online: () async => null,
+          prefs: const UiPrefs(lyricsAlign: LyricsAlign.right),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(lineText(tester, 'Main voice').textAlign, TextAlign.right);
+      expect(lineText(tester, 'Second voice').textAlign, TextAlign.left);
+    });
+
+    test('duet alignment is always opposite the main voice', () {
+      expect(duetLyricsAlign(LyricsAlign.left), LyricsAlign.right);
+      expect(duetLyricsAlign(LyricsAlign.center), LyricsAlign.right);
+      expect(duetLyricsAlign(LyricsAlign.right), LyricsAlign.left);
+    });
   });
 }

@@ -25,6 +25,15 @@ Alignment lyricsScaleAlignment(LyricsAlign a) => switch (a) {
 
 /// One lyric line's text style, shared with the Look & Feel preview so the
 /// settings show exactly what the lyrics screen will render.
+/// Where a duet's second voice (and beyond) sits: opposite the main voice,
+/// so the two are easy to tell apart — right for left- or centre-aligned
+/// lyrics, left when lyrics are right-aligned.
+LyricsAlign duetLyricsAlign(LyricsAlign main) =>
+    main == LyricsAlign.right ? LyricsAlign.left : LyricsAlign.right;
+
+/// Whether [line] is sung by a duet's second voice or later.
+bool isDuetLine(LyricLine line) => (line.singer ?? 1) >= 2;
+
 TextStyle lyricsTextStyle(AppTheme theme, UiPrefs ui) => TextStyle(
   color: theme.colors.textPrimary,
   fontSize: ui.lyricsFontSize,
@@ -170,6 +179,10 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
       itemBuilder: (context, index) {
         final line = widget.lines[index];
         final isActive = index == active;
+        // A duet's second voice: opposite side, in the accent colour.
+        final duet = isDuetLine(line);
+        final align = duet ? duetLyricsAlign(ui.lyricsAlign) : ui.lyricsAlign;
+        final style = lyricsTextStyle(theme, ui);
         return InkWell(
           borderRadius: BorderRadius.circular(8),
           onTap: ui.lyricsTapToSeek ? () => controller.seek(line.time) : null,
@@ -178,7 +191,7 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
             duration: const Duration(milliseconds: 250),
             child: AnimatedScale(
               scale: isActive ? 1 : 0.92,
-              alignment: lyricsScaleAlignment(ui.lyricsAlign),
+              alignment: lyricsScaleAlignment(align),
               duration: const Duration(milliseconds: 250),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10),
@@ -186,8 +199,10 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
                   width: double.infinity,
                   child: Text(
                     line.text,
-                    textAlign: lyricsTextAlign(ui.lyricsAlign),
-                    style: lyricsTextStyle(theme, ui),
+                    textAlign: lyricsTextAlign(align),
+                    style: duet
+                        ? style.copyWith(color: theme.colors.accent)
+                        : style,
                   ),
                 ),
               ),

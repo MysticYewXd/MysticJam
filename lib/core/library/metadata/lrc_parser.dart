@@ -3,7 +3,11 @@ class LyricLine {
   final Duration time;
   final String text;
 
-  const LyricLine(this.time, this.text);
+  /// Which voice sings the line in a duet (Enhanced LRC's `v1:`, `v2:` …),
+  /// or null when the lyrics don't say.
+  final int? singer;
+
+  const LyricLine(this.time, this.text, {this.singer});
 }
 
 /// Standard LRC line: `[mm:ss.xx]text` or `[mm:ss.xxx]text`, optionally with
@@ -16,18 +20,26 @@ final _timestamp = RegExp(r'^\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]');
 
 /// Enhanced LRC (word-level timing, as in Apple Music exports) adds a
 /// `<mm:ss.xx>` before each word and an optional singer marker (`v1:`,
-/// `v2:`) at the start of the text. Both are stripped for display; the
-/// stored lyrics keep them.
+/// `v2:`) at the start of the text. Both are stripped from the text (the
+/// stored lyrics keep them); the singer is kept as [LyricLine.singer].
 final _wordTimestamp = RegExp(r'<\d{1,3}:\d{2}(?:[.:]\d{1,3})?>');
-final _singerMarker = RegExp(r'^v\d+:\s*');
+final _singerMarker = RegExp(r'^v(\d+):\s*');
 final _spaces = RegExp(r'\s+');
 
-/// The lyric text after a line's timestamps, without Enhanced LRC codes.
-/// Plain lines are only trimmed, so ordinary lyrics are shown as written.
-String _lyricText(String rest) {
-  final text = rest.trim().replaceFirst(_singerMarker, '');
-  if (!_wordTimestamp.hasMatch(text)) return text;
-  return text.replaceAll(_wordTimestamp, '').replaceAll(_spaces, ' ').trim();
+/// The lyric text after a line's timestamps, without Enhanced LRC codes,
+/// and the singer its marker named. Plain lines are only trimmed, so
+/// ordinary lyrics are shown as written.
+(String, int?) _lyricText(String rest) {
+  var text = rest.trim();
+  final marker = _singerMarker.firstMatch(text);
+  final singer = marker == null ? null : int.parse(marker.group(1)!);
+  if (marker != null) text = text.substring(marker.end);
+  if (!_wordTimestamp.hasMatch(text)) return (text, singer);
+  final clean = text
+      .replaceAll(_wordTimestamp, '')
+      .replaceAll(_spaces, ' ')
+      .trim();
+  return (clean, singer);
 }
 
 /// Parses raw `.lrc` file content into time-ordered lyric lines. Never
@@ -56,10 +68,10 @@ List<LyricLine> parseLrc(String content) {
     }
 
     if (timestamps.isEmpty) continue;
-    final text = _lyricText(remaining);
+    final (text, singer) = _lyricText(remaining);
     if (text.isEmpty) continue;
     for (final time in timestamps) {
-      lines.add(LyricLine(time, text));
+      lines.add(LyricLine(time, text, singer: singer));
     }
   }
 

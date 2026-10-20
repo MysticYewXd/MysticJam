@@ -108,6 +108,21 @@ not a timestamp line
     });
   });
 
+  group('duet singers', () {
+    test('v1 and v2 are kept as the line\'s singer', () {
+      final lines = parseLrc(
+        '[00:01.00]v1: <00:01.00>Main\n[00:02.00]v2: <00:02.00>Feature',
+      );
+      expect(lines.map((l) => l.singer), [1, 2]);
+      expect(lines.map((l) => l.text), ['Main', 'Feature']);
+    });
+
+    test('plain LRC and a mid-line v1: have no singer', () {
+      final lines = parseLrc('[00:01.00]Plain\n[00:02.00]They said v1: next');
+      expect(lines.map((l) => l.singer), [null, null]);
+    });
+  });
+
   group('activeLyricIndex', () {
     final lines = [
       const LyricLine(Duration(seconds: 1), 'A'),
