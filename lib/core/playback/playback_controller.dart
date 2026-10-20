@@ -174,9 +174,9 @@ class PlaybackController extends Notifier<PlaybackState> {
     });
 
     final volumeController = ref.read(systemVolumeControllerProvider);
-    // Live external changes (hardware keys, OS volume UI) — Android only for
-    // now; Linux has no cheap way to watch for these, see
-    // LinuxSystemVolumeController.
+    // Live external changes (hardware keys, the desktop's volume control):
+    // Android's volume listener, or `pactl subscribe` on Linux (see
+    // LinuxSystemVolumeController).
     _volumeSub = volumeController.volumeChanges.listen((volume) {
       state = state.copyWith(volume: volume);
     });
