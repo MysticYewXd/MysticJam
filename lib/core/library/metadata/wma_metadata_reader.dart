@@ -104,6 +104,7 @@ Future<ParsedMetadata> readWmaMetadata(String filePath) async {
       int? trackNumber;
       String? albumArtist;
       int? year;
+      String? lyrics;
 
       for (var i = 0; i < headerObjectCount && pos + 24 <= length; i++) {
         await raf.setPosition(pos);
@@ -134,6 +135,9 @@ Future<ParsedMetadata> readWmaMetadata(String filePath) async {
           trackNumber ??= parseLeadingTrackNumber(tags['WM/TRACKNUMBER']);
           albumArtist ??= _nonEmpty(tags['WM/ALBUMARTIST']);
           year ??= parseLeadingYear(tags['WM/YEAR']);
+          // WM/Lyrics is the standard name; ffmpeg-based tools write a
+          // plain "lyrics" descriptor instead.
+          lyrics ??= _nonEmpty(tags['WM/LYRICS'] ?? tags['LYRICS']);
         }
 
         pos += objSize;
@@ -147,6 +151,7 @@ Future<ParsedMetadata> readWmaMetadata(String filePath) async {
         trackNumber: trackNumber,
         albumArtist: albumArtist,
         year: year,
+        lyrics: lyrics,
       );
     } finally {
       await raf.close();

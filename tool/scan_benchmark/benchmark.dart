@@ -19,7 +19,7 @@ import 'package:music_player/core/audio/format_support.dart';
 import 'package:music_player/core/library/database.dart';
 import 'package:music_player/core/library/library_repository.dart';
 import 'package:music_player/core/library/library_scanner.dart';
-import 'package:music_player/core/library/metadata/metadata_reader.dart';
+import 'package:music_player/core/library/track_file_reader.dart';
 
 /// Sends the scanner's cover-art writes to [path] instead of the app's real
 /// support directory.
@@ -107,7 +107,7 @@ class FileSnapshot {
   int get hashCode => jsonEncode(toJson()).hashCode;
 }
 
-/// Tag-reading cost for one format, measured on its own (no database).
+/// File-reading cost for one format, measured on its own (no database).
 class FormatTiming {
   final int files;
   final int tagReadMs;
@@ -169,7 +169,7 @@ class BenchmarkReport {
       ..writeln('  files: ${snapshot.length}  (failed: ${failedPaths.length})')
       ..writeln('  full scan runs (ms): ${fullScanMs.join(', ')}')
       ..writeln('  folder walk (ms): $walkMs')
-      ..writeln('  tag reading by format:');
+      ..writeln('  reading files by format (tags, art, lyrics):');
     for (final e in formats.entries) {
       final f = e.value;
       final per = f.files == 0 ? 0 : f.tagReadMs / f.files;
@@ -211,7 +211,8 @@ Future<BenchmarkReport> runBenchmark(String musicDir, {int runs = 3}) async {
     walk.stop();
     files.sort();
 
-    // Tag reading on its own, per format.
+    // Reading files on their own (tags, art, lyrics), per format — the same
+    // reader the scanner uses.
     final byFormat = <String, List<String>>{};
     for (final f in files) {
       byFormat.putIfAbsent(_format(f), () => []).add(f);
@@ -222,7 +223,7 @@ Future<BenchmarkReport> runBenchmark(String musicDir, {int runs = 3}) async {
           ..sort((a, b) => a.key.compareTo(b.key)))) {
       final sw = Stopwatch()..start();
       for (final f in e.value) {
-        await readTrackMetadata(f);
+        await readTrackFile(f);
       }
       sw.stop();
       formats[e.key] = FormatTiming(e.value.length, sw.elapsedMilliseconds);
@@ -312,3 +313,76 @@ List<FileSnapshot> readSnapshot(String path) => [
   for (final j in jsonDecode(File(path).readAsStringSync()) as List)
     FileSnapshot.fromJson((j as Map).cast<String, Object?>()),
 ];
+
+/// How a new snapshot differs from a baseline, field by field. A value
+/// appearing where the baseline had none (e.g. newly read lyrics) is a
+/// gain; any other difference — changed, lost, files missing or added — is
+/// a change to review.
+class SnapshotDiff {
+  final List<String> gains;
+  final List<String> changes;
+
+  const SnapshotDiff(this.gains, this.changes);
+
+  /// Counts per field, then every change, then up to [maxGains] gains.
+  String summary({int maxGains = 10}) {
+    String counts(List<String> lines) {
+      final byField = <String, int>{};
+      for (final l in lines) {
+        final field = l.split(': ').first;
+        byField[field] = (byField[field] ?? 0) + 1;
+      }
+      return byField.entries.map((e) => '${e.key} ${e.value}').join(', ');
+    }
+
+    final b = StringBuffer()
+      ..writeln('Gains: ${gains.length} (${counts(gains)})')
+      ..writeln('Changes: ${changes.length} (${counts(changes)})');
+    for (final c in changes) {
+      b.writeln('  $c');
+    }
+    if (gains.isNotEmpty) b.writeln('Gain examples:');
+    for (final g in gains.take(maxGains)) {
+      b.writeln('  $g');
+    }
+    return b.toString();
+  }
+}
+
+SnapshotDiff compareSnapshots(
+  List<FileSnapshot> baseline,
+  List<FileSnapshot> current,
+) {
+  String show(Object? v) {
+    final s = '$v'.replaceAll('\n', r'\n');
+    return s.length > 60 ? '${s.substring(0, 57)}...' : s;
+  }
+
+  final gains = <String>[];
+  final changes = <String>[];
+  final now = {for (final s in current) s.path: s.toJson()};
+  final before = {for (final s in baseline) s.path: s.toJson()};
+  for (final path in before.keys) {
+    final old = before[path]!;
+    final cur = now[path];
+    if (cur == null) {
+      changes.add('missing file: $path');
+      continue;
+    }
+    for (final field in old.keys) {
+      final a = old[field];
+      final b = cur[field];
+      if (a == b) continue;
+      final name = p.basename(path);
+      if (a == null) {
+        gains.add('$field: $name -> ${show(b)}');
+      } else {
+        changes.add('$field: $name: ${show(a)} -> ${show(b)}');
+      }
+    }
+  }
+  for (final path in now.keys) {
+    if (!before.containsKey(path)) changes.add('added file: $path');
+  }
+  return SnapshotDiff(gains, changes);
+}

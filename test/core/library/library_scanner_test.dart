@@ -8,6 +8,8 @@ import 'package:music_player/core/library/database.dart';
 import 'package:music_player/core/library/library_repository.dart';
 import 'package:music_player/core/library/library_scanner.dart';
 
+import '../../helpers/rust_lib.dart';
+
 /// Throws from upsertTrack for any path containing [triggerSubstring] —
 /// used to force a genuine, controlled failure through _indexFile's own
 /// try/catch, the same way a real database-level error (disk full, locked
@@ -31,6 +33,9 @@ class _ThrowingRepository extends LibraryRepository {
 }
 
 void main() {
+  // The scanner reads files through Rust; test that path, not the fallback.
+  setUpAll(loadRustLib);
+
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
 
   late Directory tempDir;

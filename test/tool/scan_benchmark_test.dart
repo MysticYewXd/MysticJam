@@ -6,6 +6,7 @@ import 'package:path_provider_platform_interface/path_provider_platform_interfac
 
 import '../../tool/scan_benchmark/benchmark.dart';
 import '../helpers/flac_fixture.dart';
+import '../helpers/rust_lib.dart';
 
 /// Stands in for the app's real support directory; the benchmark must never
 /// write cover art (or anything else) through it.
@@ -23,6 +24,8 @@ Map<String, int> _listing(Directory dir) => {
 };
 
 void main() {
+  setUpAll(loadRustLib);
+
   late Directory music;
   late Directory realSupport;
   late Directory out;
@@ -61,7 +64,7 @@ void main() {
     expect(report.failedPaths, isEmpty);
   });
 
-  test('snapshots what the scanner stored, including today\'s gaps', () async {
+  test('snapshots what the scanner stored', () async {
     final report = await runBenchmark(music.path, runs: 1);
     final byTitle = {for (final s in report.snapshot) s.title: s};
 
@@ -72,11 +75,11 @@ void main() {
     // Folder cover art is found for songs next to cover.jpg.
     expect(byTitle['One']!.artworkBytes, 4);
     expect(byTitle['Three']!.artworkBytes, isNull);
-    // The Dart FLAC reader ignores embedded lyrics today — the gap the Rust
-    // reader closes. Recorded as-is so the baseline is honest.
-    expect(byTitle['Three']!.lyrics, isNull);
+    // Embedded FLAC lyrics: read since the Rust reader (the Dart FLAC
+    // reader ignored them).
+    expect(byTitle['Three']!.lyrics, 'Hello lyrics');
     expect(report.withSyncedLyrics, 1);
-    expect(report.withEmbeddedLyrics, 0);
+    expect(report.withEmbeddedLyrics, 1);
   });
 
   test('is read-only: the music folder and app data are untouched', () async {
@@ -99,5 +102,33 @@ void main() {
     }
     expect(readSnapshot(p.join(out.path, 'snapshot.json')), report.snapshot);
     expect(report.summary(), contains('flac'));
+  });
+
+  test('snapshot comparison separates gains from changes', () {
+    const old = FileSnapshot(path: '/m/a.flac', format: 'flac', title: 'A');
+    const same = FileSnapshot(path: '/m/b.flac', format: 'flac', title: 'B');
+    const gone = FileSnapshot(path: '/m/c.flac', format: 'flac', title: 'C');
+    const gained = FileSnapshot(
+      path: '/m/a.flac',
+      format: 'flac',
+      title: 'A',
+      lyrics: 'New words',
+    );
+    const renamed = FileSnapshot(
+      path: '/m/b.flac',
+      format: 'flac',
+      title: 'Bee',
+    );
+    const extra = FileSnapshot(path: '/m/d.flac', format: 'flac', title: 'D');
+
+    final diff = compareSnapshots([old, same, gone], [gained, renamed, extra]);
+    expect(diff.gains, ['lyrics: a.flac -> New words']);
+    expect(diff.changes, [
+      'title: b.flac: B -> Bee',
+      'missing file: /m/c.flac',
+      'added file: /m/d.flac',
+    ]);
+    expect(compareSnapshots([old], [old]).changes, isEmpty);
+    expect(diff.summary(), contains('Gains: 1 (lyrics 1)'));
   });
 }

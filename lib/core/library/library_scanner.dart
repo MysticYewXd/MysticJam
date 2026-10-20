@@ -8,10 +8,7 @@ import '../audio/format_support.dart';
 import 'album_grouping.dart';
 import 'database.dart';
 import 'library_repository.dart';
-import 'metadata/metadata_reader.dart';
-
-const _coverArtBaseNames = ['cover', 'folder', 'album', 'front', 'albumart'];
-const _coverArtExtensions = ['jpg', 'jpeg', 'png'];
+import 'track_file_reader.dart';
 
 /// How many files' worth of database writes get wrapped into one
 /// transaction. Chosen from Phase 4's benchmark: an unbatched scan of 501
@@ -94,9 +91,10 @@ class LibraryScanner {
       }
 
       final ext = p.extension(path).replaceFirst('.', '').toLowerCase();
-      final metadata = await readTrackMetadata(path);
+      final file = await readTrackFile(path);
+      final metadata = file.metadata;
       final title = metadata.title ?? p.basenameWithoutExtension(path);
-      final syncedLyrics = await _findLrcSidecar(path);
+      final syncedLyrics = file.syncedLyrics;
 
       // Album membership comes from the tags alone (see albumKeyFor) — never
       // the folder — and falls back to the Unknown Album bucket when the
@@ -143,10 +141,9 @@ class LibraryScanner {
         ),
       );
 
-      // Embedded art (ID3 APIC / FLAC PICTURE) takes priority; many FLAC
-      // rips ship art as a plain cover.jpg/folder.jpg next to the audio
-      // instead of embedding it, so that's the fallback.
-      final artwork = metadata.artwork ?? await _findExternalArtwork(path);
+      // Embedded art, else a cover.jpg/folder.jpg next to the audio (see
+      // readTrackFile).
+      final artwork = metadata.artwork;
       if (artwork != null) {
         final artPath = await _saveArtwork(id, artwork);
         if (artPath != null) {
@@ -176,8 +173,9 @@ class LibraryScanner {
     for (var i = 0; i < paths.length; i++) {
       final path = paths[i];
       if (await File(path).exists()) {
-        final synced = await _findLrcSidecar(path);
-        final plain = (await readTrackMetadata(path)).lyrics;
+        final file = await readTrackFile(path);
+        final synced = file.syncedLyrics;
+        final plain = file.metadata.lyrics;
         if (synced != null || plain != null) {
           found[path] = (plain: plain, synced: synced);
         }
@@ -186,54 +184,6 @@ class LibraryScanner {
     }
     await repository.setLyricsForPaths(found);
     return found.length;
-  }
-
-  /// Reads `<same name>.lrc` next to [audioFilePath], if it exists — a
-  /// straight sibling-file check, not a directory listing, since (unlike
-  /// cover art) an LRC file's own name always matches the track it's for.
-  /// Case-insensitive extension, since rippers/taggers disagree on `.lrc`
-  /// vs `.LRC`. Returns the raw file content for [parseLrc] to read later,
-  /// not pre-parsed — see Tracks.syncedLyrics.
-  Future<String?> _findLrcSidecar(String audioFilePath) async {
-    final base = p.withoutExtension(audioFilePath);
-    for (final candidate in ['$base.lrc', '$base.LRC']) {
-      try {
-        final file = File(candidate);
-        if (await file.exists()) {
-          final content = await file.readAsString();
-          if (content.trim().isNotEmpty) return content;
-          return null;
-        }
-      } catch (_) {
-        // Unreadable sidecar (permissions, bad encoding) — not fatal, the
-        // track still gets indexed without synced lyrics.
-      }
-    }
-    return null;
-  }
-
-  Future<Uint8List?> _findExternalArtwork(String audioFilePath) async {
-    try {
-      final dir = Directory(p.dirname(audioFilePath));
-      if (!await dir.exists()) return null;
-
-      await for (final entity in dir.list(followLinks: false)) {
-        if (entity is! File) continue;
-        final base = p.basenameWithoutExtension(entity.path).toLowerCase();
-        final ext = p
-            .extension(entity.path)
-            .replaceFirst('.', '')
-            .toLowerCase();
-        if (_coverArtBaseNames.contains(base) &&
-            _coverArtExtensions.contains(ext)) {
-          final bytes = await entity.readAsBytes();
-          if (bytes.isNotEmpty) return bytes;
-        }
-      }
-    } catch (_) {
-      // No cover file, or the directory couldn't be listed — not fatal.
-    }
-    return null;
   }
 
   Future<String?> _saveArtwork(int trackId, Uint8List bytes) async {

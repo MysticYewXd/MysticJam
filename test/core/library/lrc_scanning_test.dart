@@ -11,6 +11,7 @@ import 'package:music_player/core/library/library_scanner.dart';
 import 'package:music_player/core/library/metadata/lrc_parser.dart';
 
 import '../../helpers/flac_fixture.dart';
+import '../../helpers/rust_lib.dart';
 
 class _FakePathProviderPlatform extends PathProviderPlatform {
   final String path;
@@ -20,6 +21,9 @@ class _FakePathProviderPlatform extends PathProviderPlatform {
 }
 
 void main() {
+  // The scanner reads files through Rust; test that path, not the fallback.
+  setUpAll(loadRustLib);
+
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
 
   late Directory musicDir;
