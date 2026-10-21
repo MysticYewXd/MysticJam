@@ -414,7 +414,12 @@ class LibraryScanner {
   /// Tracks whose file no longer exists on disk are removed outright.
   /// [onProgress] gets a real (processed, total) pair here — unlike
   /// [scanDirectory], the full path list is already known upfront.
+  ///
+  /// Afterwards each of [folders] (the ones added through "Add Folder") is
+  /// walked for songs that arrived since, which are added like a normal
+  /// scan would. Folders that are gone (an unplugged drive) are skipped.
   Future<RefreshResult> refreshAllMetadata({
+    List<String> folders = const [],
     ScanCancellationToken? cancellationToken,
     void Function(int processed, int total)? onProgress,
   }) async {
@@ -422,6 +427,8 @@ class LibraryScanner {
     final paths = await repository.getAllFilePaths();
     var removed = 0;
     var processed = 0;
+    var added = 0;
+    var failed = 0;
     var wasCancelled = false;
 
     for (var i = 0; i < paths.length; i += _batchSize) {
@@ -441,12 +448,30 @@ class LibraryScanner {
       );
     }
 
+    // Runs after the refresh so new songs aren't read twice; files already
+    // in the library are skipped by the scan.
+    for (final folder in folders) {
+      if (wasCancelled || (cancellationToken?.isCancelled ?? false)) {
+        wasCancelled = true;
+        break;
+      }
+      final found = await scanDirectory(
+        folder,
+        cancellationToken: cancellationToken,
+      );
+      added += found.addedCount;
+      failed += found.failedPaths.length;
+      wasCancelled = found.wasCancelled;
+    }
+
     // Songs whose tags changed have moved to other albums; drop the albums
     // they left empty (even after a cancel).
     final emptied = await repository.deleteEmptyAlbums();
     AppLog.info('scan', 'refresh finished', {
       'processed': processed,
       'removed': removed,
+      'added': added,
+      'failed': failed,
       'emptyAlbumsRemoved': emptied,
       'cancelled': wasCancelled,
       'ms': clock.elapsedMilliseconds,
@@ -455,6 +480,8 @@ class LibraryScanner {
     return RefreshResult(
       processed: processed,
       removed: removed,
+      added: added,
+      failed: failed,
       wasCancelled: wasCancelled,
     );
   }
@@ -463,11 +490,19 @@ class LibraryScanner {
 class RefreshResult {
   final int processed;
   final int removed;
+
+  /// New songs found in the saved folders.
+  final int added;
+
+  /// New songs that couldn't be read.
+  final int failed;
   final bool wasCancelled;
 
   const RefreshResult({
     required this.processed,
     required this.removed,
+    this.added = 0,
+    this.failed = 0,
     this.wasCancelled = false,
   });
 }

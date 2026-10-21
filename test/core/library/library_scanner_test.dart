@@ -242,6 +242,108 @@ void main() {
     });
   });
 
+  group('refresh finds new songs', () {
+    test(
+      'adds a song dropped into a saved folder since the last scan',
+      () async {
+        writeFile('a.mp3');
+        writeFile('b.mp3');
+        final db = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(db.close);
+        final repo = LibraryRepository(db);
+        final scanner = LibraryScanner(repo);
+        await scanner.scanDirectory(tempDir.path);
+        Directory('${tempDir.path}/New Album').createSync();
+        writeFile('New Album/c.mp3');
+
+        final result = await scanner.refreshAllMetadata(
+          folders: [tempDir.path],
+        );
+
+        expect(result.added, 1);
+        expect(result.processed, 2, reason: 'the new song is not read twice');
+        expect(
+          await repo.trackExists('${tempDir.path}/New Album/c.mp3'),
+          isTrue,
+        );
+        expect(
+          (await repo.getAllFilePaths()).length,
+          3,
+          reason: 'songs already in the library are not duplicated',
+        );
+      },
+    );
+
+    test('without saved folders it only refreshes known songs', () async {
+      writeFile('a.mp3');
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(db.close);
+      final repo = LibraryRepository(db);
+      final scanner = LibraryScanner(repo);
+      await scanner.scanDirectory(tempDir.path);
+      writeFile('b.mp3');
+
+      final result = await scanner.refreshAllMetadata();
+
+      expect(result.added, 0);
+      expect(await repo.trackExists('${tempDir.path}/b.mp3'), isFalse);
+    });
+
+    test('a saved folder that no longer exists is skipped', () async {
+      writeFile('a.mp3');
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(db.close);
+      final repo = LibraryRepository(db);
+      final scanner = LibraryScanner(repo);
+      await scanner.scanDirectory(tempDir.path);
+      writeFile('b.mp3');
+
+      final result = await scanner.refreshAllMetadata(
+        folders: ['${tempDir.path}/unplugged-drive', tempDir.path],
+      );
+
+      expect(result.added, 1);
+      expect(result.processed, 1);
+      expect(result.wasCancelled, isFalse);
+    });
+
+    test('a refresh cancelled early does not go on to scan folders', () async {
+      writeFile('a.mp3');
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(db.close);
+      final repo = LibraryRepository(db);
+      final scanner = LibraryScanner(repo);
+      await scanner.scanDirectory(tempDir.path);
+      writeFile('b.mp3');
+      final token = ScanCancellationToken();
+
+      final result = await scanner.refreshAllMetadata(
+        folders: [tempDir.path],
+        cancellationToken: token,
+        onProgress: (_, _) => token.cancel(),
+      );
+
+      expect(result.wasCancelled, isTrue);
+      expect(result.added, 0);
+      expect(await repo.trackExists('${tempDir.path}/b.mp3'), isFalse);
+    });
+
+    test('counts new songs that could not be read', () async {
+      writeFile('a.mp3');
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(db.close);
+      final scanner = LibraryScanner(_ThrowingRepository(db, 'bad'));
+      await scanner.scanDirectory(tempDir.path);
+      writeFile('bad.mp3');
+      writeFile('good.mp3');
+
+      final result = await scanner.refreshAllMetadata(folders: [tempDir.path]);
+
+      expect(result.added, 1);
+      expect(result.failed, 1);
+    });
+  });
+
   group('error reporting', () {
     test(
       'one failing file is reported in failedPaths without blocking the rest of its batch',

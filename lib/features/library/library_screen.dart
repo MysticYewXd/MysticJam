@@ -90,6 +90,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     try {
       final scanner = ref.read(libraryScannerProvider);
       final result = await scanner.refreshAllMetadata(
+        folders: ref.read(appSettingsProvider).importedFolders,
         cancellationToken: token,
         onProgress: (processed, total) {
           // Throttled to every 10th file — a setState per file is cheap
@@ -107,15 +108,18 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       if (mounted) {
         final base =
             'Refreshed ${result.processed} track${result.processed == 1 ? '' : 's'}';
-        final withRemoved = result.removed > 0
-            ? '$base (${result.removed} removed — file not found)'
+        final withAdded = result.added > 0
+            ? '$base, ${result.added} new'
             : base;
+        final withRemoved = result.removed > 0
+            ? '$withAdded (${result.removed} removed — file not found)'
+            : withAdded;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
               _withFailureNote(
                 withRemoved,
-                0,
+                result.failed,
                 wasCancelled: result.wasCancelled,
               ),
             ),
@@ -159,8 +163,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           }
         },
       );
-      // Recorded for a future "re-scan all my folders" feature — not
-      // surfaced in any UI yet (see AppSettingsState.importedFolders).
+      // Remembered so "Refresh Metadata" can look here for new songs.
       await ref.read(appSettingsProvider.notifier).addImportedFolder(path);
       if (mounted) {
         final base = 'Added ${result.addedCount} tracks';

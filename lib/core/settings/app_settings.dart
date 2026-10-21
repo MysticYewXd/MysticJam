@@ -166,9 +166,8 @@ class AppSettingsState {
   /// Most-recently-played first, capped at [_recentlyPlayedLimit].
   final List<int> recentlyPlayedTrackIds;
 
-  /// Every folder path ever picked via "Add Folder" — not yet surfaced in
-  /// any UI (no "re-scan all my folders" feature exists yet), kept ready
-  /// for when that's built.
+  /// Every folder path ever picked via "Add Folder" — "Refresh Metadata"
+  /// walks these for songs added since.
   final List<String> importedFolders;
 
   final UiPrefs ui;
