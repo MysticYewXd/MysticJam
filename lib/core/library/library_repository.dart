@@ -125,6 +125,16 @@ class LibraryRepository {
     return row != null;
   }
 
+  /// Whether [filePath] is indexed, and its scan stamp if so (null when it
+  /// was indexed before stamps existed) — one query for what a refresh
+  /// needs to decide whether to re-read a file.
+  Future<({bool exists, String? stamp})> scanStampOf(String filePath) async {
+    final row = await (db.select(
+      db.tracks,
+    )..where((t) => t.filePath.equals(filePath))).getSingleOrNull();
+    return (exists: row != null, stamp: row?.scanStamp);
+  }
+
   /// Looks up a track by its stable row id — used to resume the last
   /// played track on startup (see AppSettingsState.lastTrackId), since a
   /// filePath alone wouldn't survive the track being renamed/moved.

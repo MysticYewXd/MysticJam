@@ -415,6 +415,57 @@ void main() {
     },
   );
 
+  /// A v7 install: like v6 plus synced lyrics, a playlist entry, and no
+  /// scan stamp column yet.
+  void seedV7Database(String path) {
+    seedV6Database(path);
+    final db = sqlite3.sqlite3.open(path);
+    try {
+      db.execute('ALTER TABLE tracks ADD COLUMN synced_lyrics TEXT NULL;');
+      db.execute(
+        "UPDATE tracks SET synced_lyrics = '[00:01.00]Kept', lyrics = 'kept';",
+      );
+      db.execute('INSERT INTO playlists (name, date_created) VALUES (?, ?);', [
+        'Mine',
+        DateTime(2025, 6, 1).millisecondsSinceEpoch,
+      ]);
+      db.execute(
+        'INSERT INTO playlist_tracks (playlist_id, track_id, position) VALUES (1, 1, 0);',
+      );
+      db.execute('PRAGMA user_version = 7;');
+    } finally {
+      db.close();
+    }
+  }
+
+  test(
+    'migrating from v7 to v8 adds an empty scan stamp and keeps everything',
+    () async {
+      final dbPath = p.join(tempDir.path, 'migration_v7.sqlite');
+      seedV7Database(dbPath);
+      final db = AppDatabase.forTesting(NativeDatabase(File(dbPath)));
+      addTearDown(db.close);
+
+      final track = await db.select(db.tracks).getSingle();
+      expect(track.title, 'Kept Song');
+      expect(track.syncedLyrics, '[00:01.00]Kept');
+      expect(track.lyrics, 'kept');
+      expect(track.albumId, (await db.select(db.albums).getSingle()).id);
+      expect(
+        track.scanStamp,
+        isNull,
+        reason: 'null means the first refresh reads this song once',
+      );
+      expect((await db.select(db.playlists).get()).length, 1);
+      expect((await db.select(db.playlistTracks).get()).length, 1);
+
+      await (db.update(db.tracks)..where((t) => t.id.equals(track.id))).write(
+        const TracksCompanion(scanStamp: Value('v1|stamp')),
+      );
+      expect((await db.select(db.tracks).getSingle()).scanStamp, 'v1|stamp');
+    },
+  );
+
   test(
     'a fresh (onCreate) database already has the v5 columns available',
     () async {

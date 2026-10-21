@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -341,6 +341,138 @@ void main() {
 
       expect(result.added, 1);
       expect(result.failed, 1);
+    });
+  });
+
+  group('refresh skips unchanged songs', () {
+    late AppDatabase db;
+    late LibraryRepository repo;
+    late LibraryScanner scanner;
+
+    setUp(() {
+      db = AppDatabase.forTesting(NativeDatabase.memory());
+      repo = LibraryRepository(db);
+      scanner = LibraryScanner(repo);
+    });
+
+    tearDown(() => db.close());
+
+    /// Moves a file's modified time, as an editor or tagger saving it would.
+    void touch(String name) {
+      File('${tempDir.path}/$name').setLastModifiedSync(DateTime(2030));
+    }
+
+    Future<Track> trackAt(String name) => (db.select(
+      db.tracks,
+    )..where((t) => t.filePath.equals('${tempDir.path}/$name'))).getSingle();
+
+    test('a second refresh of an unchanged folder reads nothing', () async {
+      for (var i = 0; i < 3; i++) {
+        writeFile('track_$i.mp3');
+      }
+      await scanner.scanDirectory(tempDir.path);
+
+      final first = await scanner.refreshAllMetadata();
+      final second = await scanner.refreshAllMetadata();
+
+      expect(first.skipped, 3, reason: 'Add Folder already stamped them');
+      expect(second.skipped, 3);
+      expect(second.processed, 3);
+    });
+
+    test('a song whose file changed is re-read', () async {
+      writeFile('a.mp3');
+      writeFile('b.mp3');
+      await scanner.scanDirectory(tempDir.path);
+      touch('b.mp3');
+
+      final result = await scanner.refreshAllMetadata();
+
+      expect(result.skipped, 1);
+      expect(result.processed, 2);
+    });
+
+    test('a new or edited .lrc next to a song gets picked up', () async {
+      writeFile('a.mp3');
+      await scanner.scanDirectory(tempDir.path);
+      File('${tempDir.path}/a.lrc').writeAsStringSync('[00:01.00]First');
+
+      final added = await scanner.refreshAllMetadata();
+      expect(added.skipped, 0);
+      expect((await trackAt('a.mp3')).syncedLyrics, contains('First'));
+
+      File('${tempDir.path}/a.lrc')
+        ..writeAsStringSync('[00:01.00]Second')
+        ..setLastModifiedSync(DateTime(2030));
+      final edited = await scanner.refreshAllMetadata();
+      expect(edited.skipped, 0);
+      expect((await trackAt('a.mp3')).syncedLyrics, contains('Second'));
+    });
+
+    test('a new folder cover makes the songs beside it re-read', () async {
+      writeFile('a.mp3');
+      writeFile('b.mp3');
+      await scanner.scanDirectory(tempDir.path);
+      writeFile('Cover.JPG', bytes: 64);
+
+      final result = await scanner.refreshAllMetadata();
+
+      expect(result.skipped, 0);
+      expect((await scanner.refreshAllMetadata()).skipped, 2);
+    });
+
+    test('songs indexed before stamps existed are read once', () async {
+      writeFile('a.mp3');
+      writeFile('b.mp3');
+      await scanner.scanDirectory(tempDir.path);
+      await db
+          .update(db.tracks)
+          .write(const TracksCompanion(scanStamp: Value(null)));
+
+      final first = await scanner.refreshAllMetadata();
+      final second = await scanner.refreshAllMetadata();
+
+      expect(first.skipped, 0);
+      expect((await trackAt('a.mp3')).scanStamp, isNotNull);
+      expect(second.skipped, 2);
+    });
+
+    test('a stamp from another reader version forces a re-read', () async {
+      writeFile('a.mp3');
+      await scanner.scanDirectory(tempDir.path);
+      final stamp = (await trackAt('a.mp3')).scanStamp!;
+      expect(stamp, startsWith('v$scanReaderVersion|'));
+      await db
+          .update(db.tracks)
+          .write(
+            TracksCompanion(
+              scanStamp: Value(
+                stamp.replaceFirst('v$scanReaderVersion|', 'v0|'),
+              ),
+            ),
+          );
+
+      final result = await scanner.refreshAllMetadata();
+
+      expect(result.skipped, 0);
+      expect((await trackAt('a.mp3')).scanStamp, stamp);
+    });
+
+    test('a new song found by refresh is skipped the time after', () async {
+      writeFile('a.mp3');
+      await scanner.scanDirectory(tempDir.path);
+      writeFile('b.mp3');
+
+      final first = await scanner.refreshAllMetadata(folders: [tempDir.path]);
+      final second = await scanner.refreshAllMetadata(folders: [tempDir.path]);
+
+      expect(first.added, 1);
+      expect(second.added, 0);
+      expect(second.skipped, 2);
+    });
+
+    test('a missing file has no stamp', () async {
+      expect(await scanStampFor('${tempDir.path}/gone.mp3'), isNull);
     });
   });
 

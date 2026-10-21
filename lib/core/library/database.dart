@@ -17,7 +17,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -56,6 +56,11 @@ class AppDatabase extends _$AppDatabase {
         // looks for each track's .lrc sidecar — matches how every other
         // scan-derived column has been backfilled by past migrations.
         await m.addColumn(tracks, tracks.syncedLyrics);
+      }
+      if (from < 8) {
+        // NULL stamps mean "never fingerprinted", so the first refresh
+        // after upgrading reads every song once, then skips unchanged ones.
+        await m.addColumn(tracks, tracks.scanStamp);
       }
     },
   );

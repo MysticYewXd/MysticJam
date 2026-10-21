@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -28,6 +29,66 @@ const _batchSize = 200;
 /// holds the cover art in memory, often hundreds of KB per song; 32 keeps
 /// every core busy while capping that at a few tens of MB.
 const _readChunkSize = 32;
+
+/// Bump whenever reading tags, covers or lyrics changes in a way old
+/// results should pick up: every stored stamp then stops matching, so the
+/// next "Refresh Metadata" re-reads every song once.
+const scanReaderVersion = 1;
+
+/// Same names the Rust reader looks for (rust/src/sidecar.rs), matched
+/// case-insensitively.
+const _coverNames = {'cover', 'folder', 'album', 'front', 'albumart'};
+const _coverExtensions = {'.jpg', '.jpeg', '.png'};
+
+/// A fingerprint of everything a read of [audioPath] depends on: the file's
+/// size and modified time, its `.lrc` sidecar's, and the folder cover
+/// images' — so a refresh can tell an unchanged song apart without reading
+/// it. Null when the file is gone. [coverStamps] caches the cover part per
+/// folder for the length of one scan, so a folder is listed only once.
+@visibleForTesting
+Future<String?> scanStampFor(
+  String audioPath, {
+  Map<String, Future<String>>? coverStamps,
+}) async {
+  final audio = await File(audioPath).stat();
+  if (audio.type != FileSystemEntityType.file) return null;
+  String part(FileStat s) => s.type == FileSystemEntityType.file
+      ? '${s.size}@${s.modified.millisecondsSinceEpoch}'
+      : '-';
+  final base = p.withoutExtension(audioPath);
+  final lrc = [
+    part(await File('$base.lrc').stat()),
+    part(await File('$base.LRC').stat()),
+  ].join(',');
+  final dir = p.dirname(audioPath);
+  final covers = await (coverStamps ?? {}).putIfAbsent(
+    dir,
+    () => _coverStampOf(dir),
+  );
+  return 'v$scanReaderVersion|${part(audio)}|$lrc|$covers';
+}
+
+Future<String> _coverStampOf(String dir) async {
+  final found = <String>[];
+  try {
+    await for (final entry in Directory(dir).list(followLinks: false)) {
+      final name = p.basename(entry.path);
+      final ext = p.extension(name).toLowerCase();
+      if (!_coverExtensions.contains(ext) ||
+          !_coverNames.contains(p.withoutExtension(name).toLowerCase())) {
+        continue;
+      }
+      final s = await entry.stat();
+      if (s.type == FileSystemEntityType.file) {
+        found.add('$name:${s.size}@${s.modified.millisecondsSinceEpoch}');
+      }
+    }
+  } catch (_) {
+    // An unreadable folder just gets an empty cover part.
+  }
+  found.sort();
+  return found.join(',');
+}
 
 /// Lets a caller ask an in-progress scan to stop early — checked once per
 /// file, so cancellation takes effect within roughly one file's processing
@@ -65,7 +126,9 @@ class ScanResult {
 /// scanner can tell "added" apart from "failed" apart from "already
 /// present, nothing to do", instead of collapsing all three into one
 /// boolean the way this used to work.
-enum _IndexOutcome { added, unchanged, removed, failed }
+///
+/// [skipped] is a refresh's "not re-read: its stamp still matches".
+enum _IndexOutcome { added, unchanged, skipped, removed, failed }
 
 /// Indexes supported media files into the library — either by walking a
 /// folder tree, or from an explicit list of individually-picked files.
@@ -80,7 +143,8 @@ class LibraryScanner {
   /// Indexes [batch] inside one database transaction. Normally skips files
   /// already in the library — pass [forceRescan] to re-parse and overwrite
   /// existing entries instead (used by "Refresh Metadata"), which also
-  /// removes tracks whose file is gone.
+  /// removes tracks whose file is gone. With [skipUnchanged] as well, a
+  /// file whose scan stamp still matches the stored one isn't re-read.
   ///
   /// Files are read [_readChunkSize] at a time, in parallel (see
   /// readTrackFiles), then saved one by one; [onIndexed] runs after each
@@ -94,9 +158,11 @@ class LibraryScanner {
   Future<bool> _indexBatch(
     List<String> batch, {
     required bool forceRescan,
+    bool skipUnchanged = false,
     required ScanCancellationToken? cancellationToken,
     required void Function(String path, _IndexOutcome outcome) onIndexed,
   }) async {
+    final coverStamps = <String, Future<String>>{};
     var cancelled = false;
     bool stop() => cancelled = cancellationToken?.isCancelled ?? false;
     await repository.db.transaction(() async {
@@ -107,20 +173,29 @@ class LibraryScanner {
           (i + _readChunkSize).clamp(0, batch.length),
         );
 
-        // Work out what needs reading before reading anything.
+        // Work out what needs reading before reading anything. The stamp
+        // is taken before the read, so a file changing mid-read just gets
+        // re-read next time.
         final decided = <String, _IndexOutcome>{};
         final alreadyIndexed = <String>{};
+        final stamps = <String, String?>{};
         final toRead = <String>[];
         for (final path in chunk) {
           try {
-            final exists = await repository.trackExists(path);
-            if (exists && !forceRescan) {
+            final known = await repository.scanStampOf(path);
+            if (known.exists && !forceRescan) {
               decided[path] = _IndexOutcome.unchanged;
-            } else if (forceRescan && !await File(path).exists()) {
+              continue;
+            }
+            final stamp = await scanStampFor(path, coverStamps: coverStamps);
+            if (forceRescan && stamp == null) {
               await repository.deleteTrackByPath(path);
               decided[path] = _IndexOutcome.removed;
+            } else if (skipUnchanged && stamp != null && stamp == known.stamp) {
+              decided[path] = _IndexOutcome.skipped;
             } else {
-              if (exists) alreadyIndexed.add(path);
+              if (known.exists) alreadyIndexed.add(path);
+              stamps[path] = stamp;
               toRead.add(path);
             }
           } catch (_) {
@@ -136,6 +211,7 @@ class LibraryScanner {
               await _store(
                 path,
                 read[path]!,
+                stamp: stamps[path],
                 alreadyIndexed: alreadyIndexed.contains(path),
               );
           onIndexed(path, outcome);
@@ -149,6 +225,7 @@ class LibraryScanner {
   Future<_IndexOutcome> _store(
     String path,
     TrackFileData file, {
+    required String? stamp,
     required bool alreadyIndexed,
   }) async {
     try {
@@ -199,6 +276,7 @@ class LibraryScanner {
           syncedLyrics: syncedLyrics != null
               ? Value(syncedLyrics)
               : const Value.absent(),
+          scanStamp: Value(stamp),
         ),
       );
 
@@ -418,6 +496,9 @@ class LibraryScanner {
   /// Afterwards each of [folders] (the ones added through "Add Folder") is
   /// walked for songs that arrived since, which are added like a normal
   /// scan would. Folders that are gone (an unplugged drive) are skipped.
+  ///
+  /// Songs whose scan stamp (see [scanStampFor]) hasn't changed since they
+  /// were last read are skipped instead of re-read.
   Future<RefreshResult> refreshAllMetadata({
     List<String> folders = const [],
     ScanCancellationToken? cancellationToken,
@@ -429,6 +510,7 @@ class LibraryScanner {
     var processed = 0;
     var added = 0;
     var failed = 0;
+    var skipped = 0;
     var wasCancelled = false;
 
     for (var i = 0; i < paths.length; i += _batchSize) {
@@ -439,9 +521,11 @@ class LibraryScanner {
       wasCancelled = await _indexBatch(
         paths.skip(i).take(_batchSize).toList(),
         forceRescan: true,
+        skipUnchanged: true,
         cancellationToken: cancellationToken,
         onIndexed: (path, outcome) {
           if (outcome == _IndexOutcome.removed) removed++;
+          if (outcome == _IndexOutcome.skipped) skipped++;
           processed++;
           onProgress?.call(processed, paths.length);
         },
@@ -470,6 +554,7 @@ class LibraryScanner {
     AppLog.info('scan', 'refresh finished', {
       'processed': processed,
       'removed': removed,
+      'skipped': skipped,
       'added': added,
       'failed': failed,
       'emptyAlbumsRemoved': emptied,
@@ -480,6 +565,7 @@ class LibraryScanner {
     return RefreshResult(
       processed: processed,
       removed: removed,
+      skipped: skipped,
       added: added,
       failed: failed,
       wasCancelled: wasCancelled,
@@ -491,6 +577,9 @@ class RefreshResult {
   final int processed;
   final int removed;
 
+  /// Songs not re-read because they hadn't changed (part of [processed]).
+  final int skipped;
+
   /// New songs found in the saved folders.
   final int added;
 
@@ -501,6 +590,7 @@ class RefreshResult {
   const RefreshResult({
     required this.processed,
     required this.removed,
+    this.skipped = 0,
     this.added = 0,
     this.failed = 0,
     this.wasCancelled = false,

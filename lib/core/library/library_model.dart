@@ -81,6 +81,11 @@ class Tracks extends Table {
   /// how it's read. Separate from [lyrics] (ID3 USLT), which is unsynced
   /// and comes from the audio file itself, not a sidecar.
   TextColumn get syncedLyrics => text().nullable()();
+
+  /// Fingerprint of the file and its `.lrc`/cover sidecars as of the last
+  /// time it was read (see scanStampFor). "Refresh Metadata" skips a track
+  /// whose stamp still matches. NULL until a track is first read on v8+.
+  TextColumn get scanStamp => text().nullable()();
 }
 
 /// A user-created, named ordered collection of tracks. Playback queues are
