@@ -17,14 +17,20 @@ class QueueScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = ref.watch(themeProvider);
-    final playback = ref.watch(playbackControllerProvider);
+    // Everything but position. Lists compare by identity, which is right:
+    // the controller replaces them rather than mutating.
+    final (order, queue, orderIndex, isPlaying) = ref.watch(
+      playbackControllerProvider.select(
+        (s) => (s.order, s.queue, s.orderIndex, s.isPlaying),
+      ),
+    );
     final controller = ref.read(playbackControllerProvider.notifier);
 
     return Scaffold(
       appBar: AppBar(
         title: Text('Queue', style: TextStyle(color: theme.colors.textPrimary)),
       ),
-      body: playback.order.isEmpty
+      body: order.isEmpty
           ? Center(
               child: Text(
                 'Nothing queued',
@@ -32,14 +38,14 @@ class QueueScreen extends ConsumerWidget {
               ),
             )
           : ReorderableListView.builder(
-              itemCount: playback.order.length,
+              itemCount: order.length,
               onReorderItem: controller.reorderQueue,
               // Each row has its own handle next to the remove button; the
               // automatic desktop handle would sit on top of that button.
               buildDefaultDragHandles: false,
               itemBuilder: (context, i) {
-                final track = playback.queue[playback.order[i]];
-                final isCurrent = i == playback.orderIndex;
+                final track = queue[order[i]];
+                final isCurrent = i == orderIndex;
                 return ListTile(
                   key: ValueKey(track.id),
                   leading: TrackArt(
@@ -69,7 +75,7 @@ class QueueScreen extends ConsumerWidget {
                     children: [
                       if (isCurrent)
                         ThemedIcon(
-                          playback.isPlaying
+                          isPlaying
                               ? ThemedIconSlot.pause
                               : ThemedIconSlot.play,
                           color: theme.colors.primary,

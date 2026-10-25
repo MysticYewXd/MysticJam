@@ -54,9 +54,22 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     // The whole screen re-themes from the playing track's album art. Widgets
     // below read themeProvider, so it's overridden for this subtree only.
     final theme = ref.watch(albumAdaptedThemeProvider);
-    final playback = ref.watch(playbackControllerProvider);
+    // Everything but position and volume, which only the progress row and
+    // the volume slider below follow (each through its own Consumer).
+    final playback = ref.watch(
+      playbackControllerProvider.select(
+        (s) => (
+          track: s.currentTrack,
+          shuffle: s.shuffleEnabled,
+          repeat: s.repeatMode,
+          isPlaying: s.isPlaying,
+          hasPrevious: s.hasPrevious,
+          hasNext: s.hasNext,
+        ),
+      ),
+    );
     final controller = ref.read(playbackControllerProvider.notifier);
-    final track = playback.currentTrack;
+    final track = playback.track;
     final style = ref.watch(uiPrefsProvider).nowPlayingStyle;
     final disc = style == NowPlayingStyle.disc;
 
@@ -225,42 +238,62 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                     ),
                                   ],
                                   SizedBox(height: gap(28)),
-                                  ThemedProgressBar(
-                                    position: playback.position,
-                                    duration: playback.duration,
-                                    onSeek: controller.seek,
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4,
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Flexible(
-                                          child: Text(
-                                            formatDuration(playback.position),
-                                            style: TextStyle(
-                                              color: theme.colors.textSecondary,
-                                              fontSize: timeSize,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
+                                  Consumer(
+                                    builder: (context, ref, _) {
+                                      final (position, duration) = ref.watch(
+                                        playbackControllerProvider.select(
+                                          (s) => (s.position, s.duration),
                                         ),
-                                        Flexible(
-                                          child: Text(
-                                            formatDuration(playback.duration),
-                                            textAlign: TextAlign.end,
-                                            style: TextStyle(
-                                              color: theme.colors.textSecondary,
-                                              fontSize: timeSize,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
+                                      );
+                                      return Column(
+                                        children: [
+                                          ThemedProgressBar(
+                                            position: position,
+                                            duration: duration,
+                                            onSeek: controller.seek,
                                           ),
-                                        ),
-                                      ],
-                                    ),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 4,
+                                            ),
+                                            child: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                Flexible(
+                                                  child: Text(
+                                                    formatDuration(position),
+                                                    style: TextStyle(
+                                                      color: theme
+                                                          .colors
+                                                          .textSecondary,
+                                                      fontSize: timeSize,
+                                                    ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                Flexible(
+                                                  child: Text(
+                                                    formatDuration(duration),
+                                                    textAlign: TextAlign.end,
+                                                    style: TextStyle(
+                                                      color: theme
+                                                          .colors
+                                                          .textSecondary,
+                                                      fontSize: timeSize,
+                                                    ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    },
                                   ),
                                   SizedBox(height: gap(20)),
                                   // Horizontal scroll is a last-resort safety net, not
@@ -278,7 +311,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                           slot: ThemedIconSlot.shuffle,
                                           tooltip: 'Shuffle',
                                           diameter: controlSize,
-                                          active: playback.shuffleEnabled,
+                                          active: playback.shuffle,
                                           onPressed: controller.toggleShuffle,
                                         ),
                                         SizedBox(width: gap(12)),
@@ -308,14 +341,14 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                         SizedBox(width: gap(12)),
                                         RoundIconButton(
                                           slot:
-                                              playback.repeatMode ==
+                                              playback.repeat ==
                                                   PlayerRepeatMode.one
                                               ? ThemedIconSlot.repeatOne
                                               : ThemedIconSlot.repeat,
                                           tooltip: 'Repeat',
                                           diameter: controlSize,
                                           active:
-                                              playback.repeatMode !=
+                                              playback.repeat !=
                                               PlayerRepeatMode.off,
                                           onPressed: controller.cycleRepeatMode,
                                         ),
@@ -323,9 +356,16 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                     ),
                                   ),
                                   SizedBox(height: gap(32)),
-                                  ThemedVolumeSlider(
-                                    value: playback.volume,
-                                    onChanged: controller.setVolume,
+                                  Consumer(
+                                    builder: (context, ref, _) =>
+                                        ThemedVolumeSlider(
+                                          value: ref.watch(
+                                            playbackControllerProvider.select(
+                                              (s) => s.volume,
+                                            ),
+                                          ),
+                                          onChanged: controller.setVolume,
+                                        ),
                                   ),
                                   SizedBox(height: gap(16)),
                                 ],

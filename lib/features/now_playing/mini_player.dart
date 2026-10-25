@@ -54,7 +54,12 @@ class _MiniPlayerCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final playback = ref.watch(playbackControllerProvider);
+    // Not position: only the progress line below follows the ticks.
+    final (hasPrevious, isPlaying, hasNext) = ref.watch(
+      playbackControllerProvider.select(
+        (s) => (s.hasPrevious, s.isPlaying, s.hasNext),
+      ),
+    );
     final controller = ref.read(playbackControllerProvider.notifier);
 
     return AnimatedContainer(
@@ -137,13 +142,11 @@ class _MiniPlayerCard extends ConsumerWidget {
                         slot: ThemedIconSlot.previous,
                         tooltip: 'Previous',
                         diameter: 36,
-                        onPressed: playback.hasPrevious
-                            ? controller.previous
-                            : null,
+                        onPressed: hasPrevious ? controller.previous : null,
                       ),
                       const SizedBox(width: 4),
                       PlayButton(
-                        playing: playback.isPlaying,
+                        playing: isPlaying,
                         diameter: 44,
                         onPressed: controller.togglePlayPause,
                       ),
@@ -152,15 +155,13 @@ class _MiniPlayerCard extends ConsumerWidget {
                         slot: ThemedIconSlot.next,
                         tooltip: 'Next',
                         diameter: 36,
-                        onPressed: playback.hasNext ? controller.next : null,
+                        onPressed: hasNext ? controller.next : null,
                       ),
                     ],
                   ),
                 ),
               ),
               _MiniProgressBar(
-                position: playback.position,
-                duration: playback.duration,
                 activeColor: theme.colors.progressBar,
                 trackColor: theme.colors.progressBarTrack,
               ),
@@ -179,21 +180,17 @@ class _MiniPlayerCard extends ConsumerWidget {
 /// fill between position updates instead of jumping in visible steps, so it
 /// reads as continuously running even though the underlying position only
 /// ticks a few times a second.
-class _MiniProgressBar extends StatelessWidget {
-  final Duration position;
-  final Duration duration;
+class _MiniProgressBar extends ConsumerWidget {
   final Color activeColor;
   final Color trackColor;
 
-  const _MiniProgressBar({
-    required this.position,
-    required this.duration,
-    required this.activeColor,
-    required this.trackColor,
-  });
+  const _MiniProgressBar({required this.activeColor, required this.trackColor});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final (position, duration) = ref.watch(
+      playbackControllerProvider.select((s) => (s.position, s.duration)),
+    );
     final totalMs = duration.inMilliseconds <= 0 ? 1 : duration.inMilliseconds;
     final fraction = (position.inMilliseconds / totalMs).clamp(0.0, 1.0);
 
