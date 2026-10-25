@@ -17,6 +17,7 @@ import '../../core/playback/playback_controller.dart';
 import '../../core/theme/theme_model.dart';
 import '../../core/theme/theme_provider.dart';
 import '../../widgets/themed/themed_icon.dart';
+import '../../widgets/soft_shadow.dart';
 import 'lyrics_screen.dart';
 
 // ---------------------------------------------------------------------------
@@ -440,83 +441,82 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
           tint: colors.primary,
         );
 
-        return Container(
-          padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(28),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color.lerp(body, colors.textPrimary, 0.05)!,
-                Color.lerp(body, Colors.black, 0.25)!,
+        return SoftShadow(
+          color: Colors.black.withValues(alpha: 0.35),
+          blurRadius: 30,
+          offset: const Offset(0, 16),
+          borderRadius: 28,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(28),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color.lerp(body, colors.textPrimary, 0.05)!,
+                  Color.lerp(body, Colors.black, 0.25)!,
+                ],
+              ),
+              border: Border.all(color: colors.line),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _BrandRow(theme: theme, format: track?.format),
+                const SizedBox(height: 16),
+                SizedBox.square(
+                  dimension: discSize,
+                  child: _Disc(
+                    face: face,
+                    softFace: _mood == DiscMood.soft ? _face.soft : null,
+                    hasArt: image != null,
+                    angle: _angle,
+                    fx: _fx,
+                    mood: _mood,
+                    position: _shownPos,
+                    duration: playback.duration,
+                    colors: colors,
+                    scrubbing: _scrubbing,
+                    enabled: track != null,
+                    onTap: controller.togglePlayPause,
+                    onPanStart: (d) => _scrubStart(d, Size.square(discSize)),
+                    onPanUpdate: (d) => _scrubUpdate(d, Size.square(discSize)),
+                    onPanEnd: (_) => _scrubEnd(),
+                    onPointerSignal: _wheelScrub,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: keysHeight,
+                  child: _KeysRow(
+                    theme: theme,
+                    playback: playback,
+                    onPrevious: onPrevious,
+                    onNext: onNext,
+                    onPlay: track == null ? null : controller.togglePlayPause,
+                    onLoop: controller.cycleRepeatMode,
+                    onLyrics: track == null ? null : () => _openLyrics(track),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: panelHeight,
+                  child: _OledPanel(
+                    theme: theme,
+                    playback: playback,
+                    songs: songs,
+                    current: current,
+                    forceAlbum: browse != null,
+                    position: _shownPos,
+                    onPick: pick,
+                    onSeekPreview: _barPreview,
+                    onSeekCommit: _barCommit,
+                    onSeekCancel: _barCancel,
+                  ),
+                ),
               ],
             ),
-            border: Border.all(color: colors.line),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.35),
-                blurRadius: 30,
-                offset: const Offset(0, 16),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _BrandRow(theme: theme, format: track?.format),
-              const SizedBox(height: 16),
-              SizedBox.square(
-                dimension: discSize,
-                child: _Disc(
-                  face: face,
-                  softFace: _mood == DiscMood.soft ? _face.soft : null,
-                  hasArt: image != null,
-                  angle: _angle,
-                  fx: _fx,
-                  mood: _mood,
-                  position: _shownPos,
-                  duration: playback.duration,
-                  colors: colors,
-                  scrubbing: _scrubbing,
-                  enabled: track != null,
-                  onTap: controller.togglePlayPause,
-                  onPanStart: (d) => _scrubStart(d, Size.square(discSize)),
-                  onPanUpdate: (d) => _scrubUpdate(d, Size.square(discSize)),
-                  onPanEnd: (_) => _scrubEnd(),
-                  onPointerSignal: _wheelScrub,
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: keysHeight,
-                child: _KeysRow(
-                  theme: theme,
-                  playback: playback,
-                  onPrevious: onPrevious,
-                  onNext: onNext,
-                  onPlay: track == null ? null : controller.togglePlayPause,
-                  onLoop: controller.cycleRepeatMode,
-                  onLyrics: track == null ? null : () => _openLyrics(track),
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: panelHeight,
-                child: _OledPanel(
-                  theme: theme,
-                  playback: playback,
-                  songs: songs,
-                  current: current,
-                  forceAlbum: browse != null,
-                  position: _shownPos,
-                  onPick: pick,
-                  onSeekPreview: _barPreview,
-                  onSeekCommit: _barCommit,
-                  onSeekCancel: _barCancel,
-                ),
-              ),
-            ],
           ),
         );
       },
@@ -1183,18 +1183,20 @@ class _DiscFrontPainter extends CustomPainter {
         ..color = Colors.black.withValues(alpha: 0.28),
     );
     if (sweep > 0) {
-      canvas.drawArc(
-        arcRect,
-        start,
-        sweep,
-        false,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeCap = StrokeCap.round
-          ..strokeWidth = r * 0.06
-          ..color = accent.withValues(alpha: 0.5)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
-      );
+      // Glow without a blur: two wider, fainter strokes under the arc.
+      for (final (extra, alpha) in [(14.0, 0.12), (7.0, 0.22)]) {
+        canvas.drawArc(
+          arcRect,
+          start,
+          sweep,
+          false,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeCap = StrokeCap.round
+            ..strokeWidth = r * 0.06 + extra
+            ..color = accent.withValues(alpha: alpha),
+        );
+      }
       canvas.drawArc(
         arcRect,
         start,
@@ -1399,6 +1401,28 @@ class _DeviceKeyState extends State<_DeviceKey> {
                       size: widget.primary ? 26 : 20,
                       color: fg,
                     ),
+                    // Glow behind a lit light: a soft radial gradient, not a
+                    // blurred shadow.
+                    if (!widget.primary && widget.lit)
+                      Positioned(
+                        top: -2,
+                        right: -1,
+                        child: IgnorePointer(
+                          child: Container(
+                            width: 21,
+                            height: 21,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: RadialGradient(
+                                colors: [
+                                  c.primary.withValues(alpha: 0.7),
+                                  c.primary.withValues(alpha: 0),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     if (!widget.primary)
                       Positioned(
                         top: 6,
@@ -1412,9 +1436,6 @@ class _DeviceKeyState extends State<_DeviceKey> {
                             color: widget.lit
                                 ? c.primary
                                 : Colors.white.withValues(alpha: 0.1),
-                            boxShadow: widget.lit
-                                ? [BoxShadow(color: c.primary, blurRadius: 8)]
-                                : null,
                           ),
                         ),
                       ),

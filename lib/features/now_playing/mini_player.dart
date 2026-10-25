@@ -7,6 +7,7 @@ import '../../core/theme/album_palette.dart';
 import '../../core/theme/theme_model.dart';
 import '../../core/theme/theme_provider.dart';
 import '../../widgets/themed/round_buttons.dart';
+import '../../widgets/soft_shadow.dart';
 import '../../widgets/themed/themed_icon.dart';
 import '../../widgets/themed/track_art.dart';
 import 'now_playing_screen.dart';
@@ -62,107 +63,103 @@ class _MiniPlayerCard extends ConsumerWidget {
     );
     final controller = ref.read(playbackControllerProvider.notifier);
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeInOut,
-      margin: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-      decoration: BoxDecoration(
-        color: theme.colors.chrome,
-        borderRadius: BorderRadius.circular(theme.shapes.cornerRadius * 1.5),
-        // A little more presence than before (was blurRadius 4/alpha 0.2) —
-        // matches the same "floating glass" family as the Dock beneath it
-        // (see widgets/themed/dock.dart) rather than reading as a flat card
-        // with a token shadow, which is part of why this looked like it was
-        // just hanging in empty space with nothing grounding it. Still far
-        // lighter than the Dock's own BackdropFilter blur — this card is
-        // static (no blurred background), so it doesn't need to compete for
-        // GPU budget the way the Dock's live blur does.
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    final radius = theme.shapes.cornerRadius * 1.5;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+      // Same "floating glass" family as the Dock beneath it; faked rather
+      // than blurred (see SoftShadow).
+      child: SoftShadow(
+        color: Colors.black.withValues(alpha: 0.3),
+        blurRadius: 10,
+        offset: const Offset(0, 4),
+        borderRadius: radius,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+          decoration: BoxDecoration(
+            color: theme.colors.chrome,
+            borderRadius: BorderRadius.circular(radius),
           ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const NowPlayingScreen())),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                height: 60,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Row(
-                    children: [
-                      TrackArt(
-                        albumArtPath: track.albumArtPath,
-                        size: 40,
-                        borderRadius: theme.shapes.cornerRadius * 0.6,
-                        iconSizeFraction: 0.5,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              track.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.typography.display(
-                                17,
-                                color: theme.colors.textPrimary,
-                              ),
-                            ),
-                            if (track.artist != null)
-                              Text(
-                                track.artist!,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: theme.colors.textSecondary,
-                                  fontSize: 12,
+          clipBehavior: Clip.antiAlias,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const NowPlayingScreen()),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    height: 60,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Row(
+                        children: [
+                          TrackArt(
+                            albumArtPath: track.albumArtPath,
+                            size: 40,
+                            borderRadius: theme.shapes.cornerRadius * 0.6,
+                            iconSizeFraction: 0.5,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  track.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.typography.display(
+                                    17,
+                                    color: theme.colors.textPrimary,
+                                  ),
                                 ),
-                              ),
-                          ],
-                        ),
+                                if (track.artist != null)
+                                  Text(
+                                    track.artist!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: theme.colors.textSecondary,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          RoundIconButton(
+                            slot: ThemedIconSlot.previous,
+                            tooltip: 'Previous',
+                            diameter: 36,
+                            onPressed: hasPrevious ? controller.previous : null,
+                          ),
+                          const SizedBox(width: 4),
+                          PlayButton(
+                            playing: isPlaying,
+                            diameter: 44,
+                            onPressed: controller.togglePlayPause,
+                          ),
+                          const SizedBox(width: 4),
+                          RoundIconButton(
+                            slot: ThemedIconSlot.next,
+                            tooltip: 'Next',
+                            diameter: 36,
+                            onPressed: hasNext ? controller.next : null,
+                          ),
+                        ],
                       ),
-                      RoundIconButton(
-                        slot: ThemedIconSlot.previous,
-                        tooltip: 'Previous',
-                        diameter: 36,
-                        onPressed: hasPrevious ? controller.previous : null,
-                      ),
-                      const SizedBox(width: 4),
-                      PlayButton(
-                        playing: isPlaying,
-                        diameter: 44,
-                        onPressed: controller.togglePlayPause,
-                      ),
-                      const SizedBox(width: 4),
-                      RoundIconButton(
-                        slot: ThemedIconSlot.next,
-                        tooltip: 'Next',
-                        diameter: 36,
-                        onPressed: hasNext ? controller.next : null,
-                      ),
-                    ],
+                    ),
                   ),
-                ),
+                  _MiniProgressBar(
+                    activeColor: theme.colors.progressBar,
+                    trackColor: theme.colors.progressBarTrack,
+                  ),
+                ],
               ),
-              _MiniProgressBar(
-                activeColor: theme.colors.progressBar,
-                trackColor: theme.colors.progressBarTrack,
-              ),
-            ],
+            ),
           ),
         ),
       ),

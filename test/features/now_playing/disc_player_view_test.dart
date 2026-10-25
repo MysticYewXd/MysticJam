@@ -87,6 +87,14 @@ Future<_FakePlayback> _pump(WidgetTester tester, PlaybackState initial) async {
   return fake;
 }
 
+/// Blurred box shadows are what this app avoids on weak GPUs (see
+/// SoftShadow); a plain hard shadow (blur 0) is fine.
+bool hasBlurredShadow(WidgetTester tester) => tester
+    .widgetList<DecoratedBox>(find.byType(DecoratedBox))
+    .map((b) => b.decoration)
+    .whereType<BoxDecoration>()
+    .any((d) => d.boxShadow?.any((s) => s.blurRadius > 0) ?? false);
+
 void main() {
   group('DiscFaceCache', () {
     testWidgets('reuses the texture within a size bucket', (tester) async {
@@ -182,11 +190,27 @@ void main() {
 
   group('DiscPlayerView', () {
     testWidgets('uses no live blur', (tester) async {
-      await _pump(tester, _state(isPlaying: true));
+      final fake = await _pump(tester, _state(isPlaying: true));
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(find.byType(ImageFiltered), findsNothing);
       expect(find.byType(BackdropFilter), findsNothing);
+      expect(hasBlurredShadow(tester), isFalse);
+      // Light the loop key's lamp too: its glow used to be a blur, and is
+      // now a radial gradient.
+      fake.push(
+        _state(isPlaying: true).copyWith(repeatMode: PlayerRepeatMode.all),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(hasBlurredShadow(tester), isFalse);
+      expect(
+        tester
+            .widgetList<DecoratedBox>(find.byType(DecoratedBox))
+            .map((b) => b.decoration)
+            .whereType<BoxDecoration>()
+            .any((d) => d.gradient is RadialGradient),
+        isTrue,
+      );
     });
 
     testWidgets('a paused disc stops producing frames once it settles', (

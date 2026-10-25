@@ -13,6 +13,7 @@ import '../../widgets/themed/themed_icon.dart';
 import '../../widgets/themed/themed_progress_bar.dart';
 import '../../widgets/themed/themed_volume_slider.dart';
 import '../../widgets/themed/track_art.dart';
+import '../../widgets/soft_shadow.dart';
 import 'disc_player_view.dart';
 import 'lyrics_screen.dart';
 import 'queue_screen.dart';
@@ -180,26 +181,16 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                     ),
                                   ),
                                   SizedBox(height: gap(24)),
-                                  Container(
-                                    width: artSize,
-                                    height: artSize,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(
-                                        theme.shapes.cornerRadius * 1.5,
-                                      ),
-                                      // Blur is one of the more GPU-expensive paint ops in
-                                      // Flutter's renderer — kept minimal since this
-                                      // screen has to redraw on every window resize, and
-                                      // this app targets low-power integrated GPUs too.
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: theme.colors.primary
-                                              .withValues(alpha: 0.35),
-                                          blurRadius: 24,
-                                          offset: const Offset(0, 8),
-                                        ),
-                                      ],
+                                  // A blur is one of the costlier paint ops
+                                  // on low-power GPUs; SoftShadow fakes it.
+                                  SoftShadow(
+                                    color: theme.colors.primary.withValues(
+                                      alpha: 0.35,
                                     ),
+                                    blurRadius: 24,
+                                    offset: const Offset(0, 8),
+                                    borderRadius:
+                                        theme.shapes.cornerRadius * 1.5,
                                     child: TrackArt(
                                       albumArtPath: track?.albumArtPath,
                                       size: artSize,

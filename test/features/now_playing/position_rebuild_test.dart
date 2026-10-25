@@ -10,6 +10,7 @@ import 'package:music_player/core/theme/default_theme.dart';
 import 'package:music_player/features/now_playing/mini_player.dart';
 import 'package:music_player/features/now_playing/now_playing_screen.dart';
 import 'package:music_player/features/now_playing/queue_screen.dart';
+import 'package:music_player/widgets/themed/round_buttons.dart';
 import 'package:music_player/widgets/themed/themed_volume_slider.dart';
 
 /// Position ticks arrive several times a second; these tests check that
@@ -78,7 +79,27 @@ Future<_FakePlayback> _pump(WidgetTester tester, Widget home) async {
 
 Widget _title(WidgetTester tester) => tester.widget(find.text('Song 1'));
 
+/// Blurred box shadows are what this app avoids on weak GPUs (see
+/// SoftShadow); a plain hard shadow (blur 0) is fine. The play button's own
+/// glow (round_buttons.dart) is outside this change, so it's left out.
+bool hasBlurredShadow(WidgetTester tester) => tester
+    .elementList(find.byType(DecoratedBox))
+    .where((e) => e.findAncestorWidgetOfExactType<PlayButton>() == null)
+    .map((e) => (e.widget as DecoratedBox).decoration)
+    .whereType<BoxDecoration>()
+    .any((d) => d.boxShadow?.any((s) => s.blurRadius > 0) ?? false);
+
 void main() {
+  testWidgets('Now Playing and the mini player use no blurred shadows', (
+    tester,
+  ) async {
+    await _pump(tester, const NowPlayingScreen());
+    expect(hasBlurredShadow(tester), isFalse);
+
+    await _pump(tester, const Scaffold(body: MiniPlayer()));
+    expect(hasBlurredShadow(tester), isFalse);
+  });
+
   testWidgets('Now Playing: a position tick only rebuilds the progress row', (
     tester,
   ) async {
