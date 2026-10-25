@@ -69,8 +69,8 @@ bool BoolField(const EncodableMap& map, const char* key) {
 int64_t IntField(const EncodableMap& map, const char* key) {
   const EncodableValue* value = Field(map, key);
   if (!value) return 0;
-  if (const auto* small = std::get_if<int32_t>(value)) return *small;
-  if (const auto* big = std::get_if<int64_t>(value)) return *big;
+  if (const auto* as_int32 = std::get_if<int32_t>(value)) return *as_int32;
+  if (const auto* as_int64 = std::get_if<int64_t>(value)) return *as_int64;
   return 0;
 }
 
