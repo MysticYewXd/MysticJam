@@ -145,6 +145,27 @@ void main() {
       );
     });
 
+    testWidgets('the soft copy is a small, cached copy of the face', (
+      tester,
+    ) async {
+      final cache = DiscFaceCache();
+      addTearDown(cache.dispose);
+      const red = Color(0xFFFF0000);
+      expect(cache.soft, isNull, reason: 'no face yet');
+
+      final art = _art(const Color(0xFF00FF00));
+      addTearDown(art.dispose);
+      cache.resolve(art, radius: 100, pixelRatio: 1, tint: red);
+      final soft = cache.soft;
+      expect(soft!.width, 32);
+      expect(cache.soft, same(soft), reason: 'made once per face');
+
+      final other = _art(const Color(0xFF00FFFF));
+      addTearDown(other.dispose);
+      cache.resolve(other, radius: 100, pixelRatio: 1, tint: red);
+      expect(cache.soft, isNot(same(soft)), reason: 'a new cover, a new copy');
+    });
+
     testWidgets('no texture for a disc with no room', (tester) async {
       final cache = DiscFaceCache();
       expect(
@@ -160,6 +181,14 @@ void main() {
   });
 
   group('DiscPlayerView', () {
+    testWidgets('uses no live blur', (tester) async {
+      await _pump(tester, _state(isPlaying: true));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byType(ImageFiltered), findsNothing);
+      expect(find.byType(BackdropFilter), findsNothing);
+    });
+
     testWidgets('a paused disc stops producing frames once it settles', (
       tester,
     ) async {
@@ -334,7 +363,7 @@ void main() {
   group('album entrance', () {
     /// A song on album [album]; like the real scanner, every song has its
     /// own cover file. Those files don't exist here, which makes the
-    /// entrance the "soft" one: a blur over the whole player.
+    /// entrance the "soft" one: the player fades in out of focus.
     Track song(int id, int? album, {String? tag}) => _track(id).copyWith(
       albumId: Value(album),
       album: Value(tag ?? 'Record'),
@@ -359,9 +388,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
+    /// The soft entrance fades the whole player in (the blur itself is now
+    /// faked on the disc face), so a part-transparent player means it's
+    /// running. The keys' own disabled fade wraps no Transform.
     bool blurring(WidgetTester tester) => tester
-        .widgetList<ImageFiltered>(find.byType(ImageFiltered))
-        .any((w) => w.enabled);
+        .widgetList<Opacity>(find.byType(Opacity))
+        .any((w) => w.opacity < 1 && w.child is Transform);
 
     testWidgets('plays when opening, then not when skipping within the album, '
         'and again for a new album', (tester) async {

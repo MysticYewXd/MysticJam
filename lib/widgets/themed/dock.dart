@@ -1,4 +1,5 @@
-import 'dart:ui';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -121,19 +122,36 @@ class _DockState extends ConsumerState<Dock> {
                       ),
                     ],
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(28),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                  // Fake frosted glass: a live BackdropFilter blur re-blurs
+                  // everything behind the dock on every frame, too much for
+                  // weak integrated GPUs. Tint + gradient + grain + a top
+                  // highlight read the same and are drawn once.
+                  child: RepaintBoundary(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(28),
                       child: Container(
                         height: restPillHeight,
                         decoration: BoxDecoration(
-                          color: theme.colors.surface.withValues(alpha: 0.55),
+                          // Stronger than the old 0.55: without a blur, a
+                          // thinner tint would show the content sharply.
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Color.lerp(
+                                theme.colors.surface,
+                                Colors.white,
+                                0.06,
+                              )!.withValues(alpha: 0.86),
+                              theme.colors.surface.withValues(alpha: 0.92),
+                            ],
+                          ),
                           borderRadius: BorderRadius.circular(28),
                           border: Border.all(
                             color: Colors.white.withValues(alpha: 0.08),
                           ),
                         ),
+                        child: CustomPaint(painter: _FrostPainter()),
                       ),
                     ),
                   ),
@@ -279,4 +297,63 @@ class _DockIconState extends ConsumerState<_DockIcon> {
       },
     );
   }
+}
+
+/// Grain and the top-edge highlight of the dock's fake frosted surface.
+class _FrostPainter extends CustomPainter {
+  /// A small tile of faint light and dark specks, made once and repeated.
+  static final ui.Image _grain = () {
+    const side = 64;
+    final rnd = math.Random(7);
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    final light = Paint()..color = Colors.white.withValues(alpha: 0.05);
+    final dark = Paint()..color = Colors.black.withValues(alpha: 0.06);
+    for (var i = 0; i < 700; i++) {
+      canvas.drawRect(
+        Rect.fromLTWH(
+          rnd.nextInt(side).toDouble(),
+          rnd.nextInt(side).toDouble(),
+          1,
+          1,
+        ),
+        rnd.nextBool() ? light : dark,
+      );
+    }
+    final picture = recorder.endRecording();
+    final image = picture.toImageSync(side, side);
+    picture.dispose();
+    return image;
+  }();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()
+        ..shader = ImageShader(
+          _grain,
+          TileMode.repeated,
+          TileMode.repeated,
+          Matrix4.identity().storage,
+        ),
+    );
+    // 1 px light along the top, fading out before the rounded corners.
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, size.width, 1),
+      Paint()
+        ..shader = LinearGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0),
+            Colors.white.withValues(alpha: 0.22),
+            Colors.white.withValues(alpha: 0.22),
+            Colors.white.withValues(alpha: 0),
+          ],
+          stops: const [0.04, 0.2, 0.8, 0.96],
+        ).createShader(Rect.fromLTWH(0, 0, size.width, 1)),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_FrostPainter old) => false;
 }

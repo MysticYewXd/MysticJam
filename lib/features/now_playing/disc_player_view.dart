@@ -470,6 +470,7 @@ class _DiscPlayerViewState extends ConsumerState<DiscPlayerView>
                 dimension: discSize,
                 child: _Disc(
                   face: face,
+                  softFace: _mood == DiscMood.soft ? _face.soft : null,
                   hasArt: image != null,
                   angle: _angle,
                   fx: _fx,
@@ -596,7 +597,6 @@ class _AlbumTransition extends StatelessWidget {
         var jitter = 0.0;
         var scale = 1.0;
         var opacity = 1.0;
-        var sigma = 0.0;
         final step = (t * 14).floor();
         if (running) {
           switch (mood) {
@@ -606,26 +606,19 @@ class _AlbumTransition extends StatelessWidget {
             case DiscMood.vivid:
               scale = 0.9 + 0.1 * Curves.elasticOut.transform(t);
             case DiscMood.soft:
+              // The blur itself is faked on the disc face (_DiscSpinPainter).
               final e = Curves.easeOutCubic.transform(t);
-              sigma = 14 * (1 - e);
               opacity = (0.25 + 0.75 * e).clamp(0.0, 1.0);
           }
         }
 
         return Stack(
           children: [
-            ImageFiltered(
-              enabled: sigma > 0.3,
-              imageFilter: ui.ImageFilter.blur(
-                sigmaX: math.max(sigma, 0.01),
-                sigmaY: math.max(sigma, 0.01),
-              ),
-              child: Opacity(
-                opacity: opacity,
-                child: Transform.translate(
-                  offset: Offset(jitter, 0),
-                  child: Transform.scale(scale: scale, child: child),
-                ),
+            Opacity(
+              opacity: opacity,
+              child: Transform.translate(
+                offset: Offset(jitter, 0),
+                child: Transform.scale(scale: scale, child: child),
               ),
             ),
             if (running && mood == DiscMood.stark)
@@ -729,6 +722,7 @@ double _heartbeat(DiscMood mood, double t) {
 
 class _Disc extends StatelessWidget {
   final ui.Image? face;
+  final ui.Image? softFace;
   final bool hasArt;
   final ValueNotifier<double> angle;
   final AnimationController fx;
@@ -746,6 +740,7 @@ class _Disc extends StatelessWidget {
 
   const _Disc({
     required this.face,
+    required this.softFace,
     required this.hasArt,
     required this.angle,
     required this.fx,
@@ -791,6 +786,7 @@ class _Disc extends StatelessWidget {
                 layer(
                   _DiscSpinPainter(
                     face: face,
+                    softFace: softFace,
                     glitch: hasArt,
                     angle: angle,
                     fx: fx,
@@ -843,7 +839,29 @@ class _Disc extends StatelessWidget {
 @visibleForTesting
 class DiscFaceCache {
   ui.Image? _image;
+  ui.Image? _soft;
   Object? _key;
+
+  /// A 32 px copy of the current face, for the soft albums' entrance:
+  /// stretched back up it looks blurred, without a live blur. Made once per
+  /// face (so per album and size step).
+  ui.Image? get soft {
+    final face = _image;
+    if (face == null) return null;
+    if (_soft != null) return _soft;
+    const px = 32;
+    final recorder = ui.PictureRecorder();
+    Canvas(recorder).drawImageRect(
+      face,
+      Rect.fromLTWH(0, 0, face.width.toDouble(), face.height.toDouble()),
+      const Rect.fromLTWH(0, 0, px + 0.0, px + 0.0),
+      Paint()..filterQuality = FilterQuality.medium,
+    );
+    final picture = recorder.endRecording();
+    _soft = picture.toImageSync(px, px);
+    picture.dispose();
+    return _soft;
+  }
 
   /// The face for [art] at [radius] logical pixels. Rebuilt only when the
   /// cover, tint or pixel size bucket changes; sizes are rounded up to a
@@ -923,6 +941,8 @@ class DiscFaceCache {
     // reference until that frame is gone.
     _image?.dispose();
     _image = picture.toImageSync(px, px);
+    _soft?.dispose();
+    _soft = null;
     picture.dispose();
     _key = key;
     return _image;
@@ -931,6 +951,8 @@ class DiscFaceCache {
   void dispose() {
     _image?.dispose();
     _image = null;
+    _soft?.dispose();
+    _soft = null;
   }
 }
 
@@ -982,6 +1004,7 @@ class _DiscBackPainter extends CustomPainter {
 /// spinning, so it does as little as possible.
 class _DiscSpinPainter extends CustomPainter {
   final ui.Image? face;
+  final ui.Image? softFace;
   final bool glitch;
   final ValueNotifier<double> angle;
   final AnimationController fx;
@@ -989,6 +1012,7 @@ class _DiscSpinPainter extends CustomPainter {
 
   _DiscSpinPainter({
     required this.face,
+    required this.softFace,
     required this.glitch,
     required this.angle,
     required this.fx,
@@ -1018,6 +1042,21 @@ class _DiscSpinPainter extends CustomPainter {
       Paint()..filterQuality = FilterQuality.low,
     );
 
+    // Soft albums land out of focus: the 32 px copy on top, fading out on
+    // the curve the old live blur used.
+    final soft = softFace;
+    if (soft != null && mood == DiscMood.soft && t < 1) {
+      final blur = 1 - Curves.easeOutCubic.transform(t);
+      canvas.drawImageRect(
+        soft,
+        Rect.fromLTWH(0, 0, soft.width.toDouble(), soft.height.toDouble()),
+        dst,
+        Paint()
+          ..filterQuality = FilterQuality.medium
+          ..color = Colors.white.withValues(alpha: blur),
+      );
+    }
+
     // Glitch: RGB split while a stark album lands.
     if (glitch && mood == DiscMood.stark && t < 0.7) {
       final split = r * 0.05 * (1 - t / 0.7);
@@ -1040,7 +1079,10 @@ class _DiscSpinPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_DiscSpinPainter old) =>
-      old.face != face || old.glitch != glitch || old.mood != mood;
+      old.face != face ||
+      old.softFace != softFace ||
+      old.glitch != glitch ||
+      old.mood != mood;
 }
 
 /// Fixed on top of the turning face: light sheen, clear hub, rim, and the

@@ -42,6 +42,20 @@ double _firstIconSize(WidgetTester tester) {
 }
 
 void main() {
+  testWidgets('the frosted pill is faked, with no live blur', (tester) async {
+    await tester.pumpWidget(_host());
+
+    expect(find.byType(BackdropFilter), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byType(Dock),
+        matching: find.byType(RepaintBoundary),
+      ),
+      findsWidgets,
+      reason: 'the surface is drawn once and cached',
+    );
+  });
+
   testWidgets(
     'hovering the empty space above the pill does not magnify icons',
     (tester) async {
