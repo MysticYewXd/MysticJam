@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -44,12 +45,21 @@ class TrackArt extends ConsumerWidget {
             : Image.file(
                 File(path),
                 fit: BoxFit.cover,
-                // Decode at thumbnail size instead of full resolution — a long
-                // list would otherwise hold every cover at full size in memory.
-                cacheWidth: size <= 120 ? (size * 2).round() : null,
+                // Decode at the size shown, not full resolution, rounded up
+                // to 64 px steps so resizing the window doesn't re-decode
+                // the cover on every frame.
+                cacheWidth: decodeWidth(
+                  size,
+                  MediaQuery.devicePixelRatioOf(context),
+                ),
                 errorBuilder: (context, error, stackTrace) => placeholder,
               ),
       ),
     );
   }
 }
+
+/// Width in pixels a cover shown [size] logical pixels wide is decoded at.
+@visibleForTesting
+int decodeWidth(double size, double devicePixelRatio) =>
+    math.max(1, (size * devicePixelRatio / 64).ceil()) * 64;
