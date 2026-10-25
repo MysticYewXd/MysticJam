@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/platform/android_media_session.dart';
 import 'core/platform/file_open_channel.dart';
 import 'core/platform/mpris.dart';
+import 'core/platform/windows_media_controls.dart';
 import 'core/settings/app_settings.dart';
 import 'core/theme/theme_provider.dart';
 import 'features/home_shell.dart';
@@ -25,6 +26,8 @@ class MusicPlayerApp extends ConsumerWidget {
     ref.read(androidMediaSessionProvider);
     // Linux desktop media controls (MPRIS). A no-op on other platforms.
     ref.read(mprisProvider);
+    // Windows media keys and media flyout. A no-op on other platforms.
+    ref.read(windowsMediaControlsProvider);
     return MaterialApp(
       title: 'MysticJam',
       debugShowCheckedModeBanner: false,
