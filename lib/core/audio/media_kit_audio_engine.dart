@@ -35,6 +35,15 @@ class MediaKitAudioEngine implements AudioEngine {
       _player.setVolume(volume.clamp(0.0, 1.0) * 100);
 
   @override
+  Future<void> setExclusive(bool exclusive) async {
+    final native = _player.platform;
+    if (native is! NativePlayer) return;
+    await native.setProperty('audio-exclusive', exclusive ? 'yes' : 'no');
+    // The device only switches mode when the audio output is reopened.
+    await native.command(['ao-reload']);
+  }
+
+  @override
   Future<void> dispose() => _player.dispose();
 
   @override

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/audio/audio_engine_provider.dart';
 import '../../core/library/library_providers.dart';
+import '../../core/playback/playback_controller.dart';
+import '../../core/settings/app_settings.dart';
 import '../../core/theme/theme_library.dart';
 import '../../core/theme/theme_provider.dart';
 import '../../widgets/confirm_dialog.dart';
@@ -97,6 +100,33 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
           const Divider(),
+          if (ref.watch(exclusiveAudioSupportedProvider)) ...[
+            _sectionHeader(context, ref, 'Playback'),
+            SwitchListTile(
+              secondary: Icon(
+                Icons.graphic_eq,
+                color: theme.colors.textSecondary,
+              ),
+              title: Text(
+                'Exclusive audio (bit-perfect)',
+                style: TextStyle(color: theme.colors.textPrimary),
+              ),
+              subtitle: Text(
+                'MysticJam takes the speakers or headphones for itself and '
+                'sends the music unchanged. Other apps stay silent while '
+                'it is on.',
+                style: TextStyle(color: theme.colors.textSecondary),
+              ),
+              activeThumbColor: theme.colors.primary,
+              value: ref.watch(
+                appSettingsProvider.select((s) => s.exclusiveAudio),
+              ),
+              onChanged: (value) => ref
+                  .read(playbackControllerProvider.notifier)
+                  .setExclusiveAudio(value),
+            ),
+            const Divider(),
+          ],
           _sectionHeader(context, ref, 'Appearance'),
           SwitchListTile(
             secondary: Icon(

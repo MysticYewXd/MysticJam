@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'audio_engine.dart';
@@ -10,3 +12,9 @@ final audioEngineProvider = Provider<AudioEngine>((ref) {
     'audioEngineProvider must be overridden in ProviderScope after AudioEngine.init()',
   );
 });
+
+/// Whether the "Exclusive audio" setting is offered: Windows only (WASAPI
+/// exclusive mode). Overridden in tests, which run on Linux.
+final exclusiveAudioSupportedProvider = Provider<bool>(
+  (_) => Platform.isWindows,
+);

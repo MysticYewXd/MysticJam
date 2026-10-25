@@ -70,6 +70,11 @@ class _FakeAudioEngine implements AudioEngine {
   @override
   Future<void> setVolume(double volume) async {}
 
+  final exclusive = <bool>[];
+  @override
+  Future<void> setExclusive(bool exclusive) async =>
+      this.exclusive.add(exclusive);
+
   @override
   Future<void> dispose() async {
     await _position.close();
@@ -550,6 +555,40 @@ void main() {
       addTearDown(c.dispose);
       return c;
     }
+
+    test(
+      'exclusive audio is applied, saved and applied again on launch',
+      () async {
+        final db = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(db.close);
+
+        // Off by default: the engine is never touched.
+        final engine1 = _FakeAudioEngine();
+        final container1 = sessionContainer(db, engine1);
+        container1.read(playbackControllerProvider);
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        expect(engine1.exclusive, isEmpty);
+
+        await container1
+            .read(playbackControllerProvider.notifier)
+            .setExclusiveAudio(true);
+        expect(engine1.exclusive, [true]);
+        expect(container1.read(appSettingsProvider).exclusiveAudio, isTrue);
+
+        // Relaunch: the saved setting reaches the new engine by itself.
+        final engine2 = _FakeAudioEngine();
+        final container2 = sessionContainer(db, engine2);
+        container2.read(playbackControllerProvider);
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        expect(engine2.exclusive, [true]);
+
+        await container2
+            .read(playbackControllerProvider.notifier)
+            .setExclusiveAudio(false);
+        expect(engine2.exclusive, [true, false]);
+        expect(container2.read(appSettingsProvider).exclusiveAudio, isFalse);
+      },
+    );
 
     test(
       'resumes the last track at its saved position on a fresh container',

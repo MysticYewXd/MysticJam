@@ -224,6 +224,8 @@ class PlaybackController extends Notifier<PlaybackState> {
   Future<void> _attemptResume() async {
     await _settings.ready;
     final settings = ref.read(appSettingsProvider);
+    // Before anything is reopened, so the first song already plays that way.
+    if (settings.exclusiveAudio) await _engine.setExclusive(true);
 
     state = state.copyWith(
       shuffleEnabled: settings.shuffleEnabled,
@@ -459,6 +461,13 @@ class PlaybackController extends Notifier<PlaybackState> {
   }
 
   Future<void> seek(Duration position) => _engine.seek(position);
+
+  /// Turns exclusive (bit-perfect) output on or off and remembers it; it's
+  /// applied again on every launch (see _attemptResume).
+  Future<void> setExclusiveAudio(bool enabled) async {
+    await _engine.setExclusive(enabled);
+    await _settings.setExclusiveAudio(enabled);
+  }
 
   /// Sets the OS-level system volume (not this app's internal gain) so the
   /// in-app slider and the system's own volume stay in lockstep.

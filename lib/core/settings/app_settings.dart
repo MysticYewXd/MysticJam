@@ -170,6 +170,10 @@ class AppSettingsState {
   /// walks these for songs added since.
   final List<String> importedFolders;
 
+  /// Exclusive (bit-perfect) audio output, Windows only — see
+  /// AudioEngine.setExclusive.
+  final bool exclusiveAudio;
+
   final UiPrefs ui;
 
   const AppSettingsState({
@@ -179,6 +183,7 @@ class AppSettingsState {
     this.lastPositionMs = 0,
     this.recentlyPlayedTrackIds = const [],
     this.importedFolders = const [],
+    this.exclusiveAudio = false,
     this.ui = const UiPrefs(),
   });
 
@@ -189,6 +194,7 @@ class AppSettingsState {
     int? lastPositionMs,
     List<int>? recentlyPlayedTrackIds,
     List<String>? importedFolders,
+    bool? exclusiveAudio,
     UiPrefs? ui,
   }) {
     return AppSettingsState(
@@ -199,6 +205,7 @@ class AppSettingsState {
       recentlyPlayedTrackIds:
           recentlyPlayedTrackIds ?? this.recentlyPlayedTrackIds,
       importedFolders: importedFolders ?? this.importedFolders,
+      exclusiveAudio: exclusiveAudio ?? this.exclusiveAudio,
       ui: ui ?? this.ui,
     );
   }
@@ -210,6 +217,7 @@ class AppSettingsState {
     'lastPositionMs': lastPositionMs,
     'recentlyPlayedTrackIds': recentlyPlayedTrackIds,
     'importedFolders': importedFolders,
+    'exclusiveAudio': exclusiveAudio,
     'ui': ui.toJson(),
   };
 
@@ -223,6 +231,7 @@ class AppSettingsState {
           (json['recentlyPlayedTrackIds'] as List?)?.cast<int>() ?? const [],
       importedFolders:
           (json['importedFolders'] as List?)?.cast<String>() ?? const [],
+      exclusiveAudio: json['exclusiveAudio'] as bool? ?? false,
       ui: UiPrefs.fromJson(
         (json['ui'] as Map?)?.cast<String, dynamic>() ?? const {},
       ),
@@ -302,6 +311,11 @@ class AppSettingsNotifier extends Notifier<AppSettingsState> {
 
   Future<void> setRepeatMode(String mode) async {
     state = state.copyWith(repeatMode: mode);
+    await _persist();
+  }
+
+  Future<void> setExclusiveAudio(bool enabled) async {
+    state = state.copyWith(exclusiveAudio: enabled);
     await _persist();
   }
 

@@ -31,6 +31,9 @@ class _FakeAudioEngine implements AudioEngine {
   Future<void> setVolume(double volume) async {}
 
   @override
+  Future<void> setExclusive(bool exclusive) async {}
+
+  @override
   Future<void> dispose() async {}
 
   @override

@@ -18,6 +18,10 @@ abstract class AudioEngine {
   /// 0.0 (silent) to 1.0 (full volume).
   Future<void> setVolume(double volume);
 
+  /// Exclusive output (WASAPI exclusive mode on Windows): this app takes
+  /// the audio device for itself and plays bit-perfect when it can.
+  Future<void> setExclusive(bool exclusive);
+
   Future<void> dispose();
 
   Stream<Duration> get positionStream;
