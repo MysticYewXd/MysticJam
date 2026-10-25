@@ -102,6 +102,8 @@ class _FakeAudioEngine implements AudioEngine {
 }
 
 class _FakeSystemVolumeController implements SystemVolumeController {
+  final changes = StreamController<double>.broadcast();
+
   @override
   Future<double> getVolume() async => 1.0;
 
@@ -109,7 +111,7 @@ class _FakeSystemVolumeController implements SystemVolumeController {
   Future<void> setVolume(double volume) async {}
 
   @override
-  Stream<double> get volumeChanges => const Stream.empty();
+  Stream<double> get volumeChanges => changes.stream;
 
   @override
   void dispose() {}
@@ -133,16 +135,16 @@ void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
 
   late _FakeAudioEngine engine;
+  late _FakeSystemVolumeController systemVolume;
   late ProviderContainer container;
 
   setUp(() {
     engine = _FakeAudioEngine();
+    systemVolume = _FakeSystemVolumeController();
     container = ProviderContainer(
       overrides: [
         audioEngineProvider.overrideWithValue(engine),
-        systemVolumeControllerProvider.overrideWithValue(
-          _FakeSystemVolumeController(),
-        ),
+        systemVolumeControllerProvider.overrideWithValue(systemVolume),
         // Duration-persistence writes go through the repository — a real
         // in-memory DB avoids needing a fake repository just for this.
         databaseProvider.overrideWithValue(
@@ -156,6 +158,20 @@ void main() {
   PlaybackController controller() =>
       container.read(playbackControllerProvider.notifier);
   PlaybackState state() => container.read(playbackControllerProvider);
+
+  group('system volume', () {
+    // With no polling, this stream is the only way outside changes (the
+    // desktop's volume control, media keys) reach the slider.
+    test('follows volume changes made outside the app', () async {
+      controller();
+      await pumpEventQueue();
+
+      systemVolume.changes.add(0.4);
+      await pumpEventQueue();
+
+      expect(state().volume, 0.4);
+    });
+  });
 
   group('play and pause', () {
     test('togglePlayPause plays when paused', () async {

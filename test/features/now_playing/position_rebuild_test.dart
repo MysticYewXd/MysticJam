@@ -27,8 +27,9 @@ class _FakePlayback extends PlaybackController {
   void push(PlaybackState s) => state = s;
 
   // The real one asks the OS (wpctl on Linux).
+  var volumeReads = 0;
   @override
-  Future<void> refreshVolume() async {}
+  Future<void> refreshVolume() async => volumeReads++;
 }
 
 Track _track(int id) => Track(
@@ -91,6 +92,17 @@ void main() {
     expect(find.text('0:42'), findsOneWidget);
     expect(_title(tester), same(title));
     expect(tester.widget(find.byType(ThemedVolumeSlider)), same(slider));
+  });
+
+  testWidgets('Now Playing reads the volume once on open, then never polls', (
+    tester,
+  ) async {
+    final fake = await _pump(tester, const NowPlayingScreen());
+    expect(fake.volumeReads, 1);
+
+    await tester.pump(const Duration(seconds: 5));
+
+    expect(fake.volumeReads, 1);
   });
 
   testWidgets('Now Playing: a volume change only rebuilds the slider', (

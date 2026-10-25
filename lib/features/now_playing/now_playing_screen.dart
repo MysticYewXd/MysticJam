@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -26,25 +25,19 @@ class NowPlayingScreen extends ConsumerStatefulWidget {
 }
 
 class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
-  Timer? _volumePoll;
   final _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    // Linux has no push-based "system volume changed externally" event (see
-    // LinuxSystemVolumeController), so poll while this screen is open to
-    // pick up changes made via hardware keys or the OS volume control.
-    // Harmless on Android too — a local getVolume() call is cheap, and the
-    // live listener there already covers most cases; this is just a backstop.
-    _volumePoll = Timer.periodic(const Duration(seconds: 1), (_) {
-      ref.read(playbackControllerProvider.notifier).refreshVolume();
-    });
+    // Read once on open; after that the controller follows outside changes
+    // through volumeChanges (`pactl subscribe` on Linux, the plugin's
+    // listener elsewhere), so no polling.
+    ref.read(playbackControllerProvider.notifier).refreshVolume();
   }
 
   @override
   void dispose() {
-    _volumePoll?.cancel();
     _scrollController.dispose();
     super.dispose();
   }

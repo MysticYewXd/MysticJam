@@ -89,12 +89,9 @@ class _MiniPlayerCard extends ConsumerWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () {
-            controller.refreshVolume();
-            Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const NowPlayingScreen()));
-          },
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const NowPlayingScreen())),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

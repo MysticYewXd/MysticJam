@@ -467,9 +467,8 @@ class PlaybackController extends Notifier<PlaybackState> {
     await ref.read(systemVolumeControllerProvider).setVolume(volume);
   }
 
-  /// Re-reads the system volume. Platforms without a live change stream
-  /// (Linux) only pick up external changes (OS tray, etc.) when this is
-  /// called — every "open Now Playing" call site does so on navigation.
+  /// Re-reads the system volume — Now Playing does so once when it opens,
+  /// as a backstop for a change stream that missed something.
   Future<void> refreshVolume() async {
     final volume = await ref.read(systemVolumeControllerProvider).getVolume();
     state = state.copyWith(volume: volume);
